@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgendaVault Test Runner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body class="bg-zinc-950 text-zinc-100 p-8">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-amber-400">AgendaVault Test Suite</h1>
+        <p class="text-xs text-zinc-400 mt-1">Automated unit & integration verification for Lotus Agenda & nvALT subsystems</p>
+      </div>
+      <button id="btn-rerun" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-lg shadow transition-colors">
+        Re-run All Tests
+      </button>
+    </div>
+
+    <!-- Summary Box -->
+    <div id="test-summary" class="grid grid-cols-3 gap-4">
+      <div class="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+        <span class="text-xs text-zinc-400 uppercase font-mono">Total Tests</span>
+        <div id="stat-total" class="text-2xl font-bold text-zinc-100 mt-1">-</div>
+      </div>
+      <div class="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+        <span class="text-xs text-zinc-400 uppercase font-mono">Passed</span>
+        <div id="stat-passed" class="text-2xl font-bold text-emerald-400 mt-1">-</div>
+      </div>
+      <div class="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+        <span class="text-xs text-zinc-400 uppercase font-mono">Failed</span>
+        <div id="stat-failed" class="text-2xl font-bold text-red-400 mt-1">-</div>
+      </div>
+    </div>
+
+    <!-- Test Results List -->
+    <div id="test-results" class="space-y-3">
+      <div class="text-center py-12 text-zinc-500">Running tests...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { runAllTests } from './test-suite.js';
+
+    async function execute() {
+      const container = document.getElementById('test-results');
+      container.innerHTML = '<div class="text-center py-12 text-amber-400 font-mono">Executing tests...</div>';
+
+      const results = await runAllTests();
+
+      const total = results.length;
+      const passed = results.filter(r => r.passed).length;
+      const failed = total - passed;
+
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-passed').textContent = passed;
+      document.getElementById('stat-failed').textContent = failed;
+
+      let html = '';
+      results.forEach((res, idx) => {
+        const statusColor = res.passed ? 'text-emerald-400 border-emerald-800/60 bg-emerald-950/20' : 'text-red-400 border-red-800/60 bg-red-950/20';
+        html += `
+          <div class="p-3.5 rounded-lg border ${statusColor} flex items-center justify-between text-xs">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span class="font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-[10px] text-zinc-400 uppercase">${res.group}</span>
+                <span class="font-bold text-zinc-100 text-sm">${res.name}</span>
+              </div>
+              ${res.error ? `<div class="text-red-400 font-mono text-[11px] mt-1 pl-2 border-l-2 border-red-500">${res.error}</div>` : ''}
+            </div>
+            <div class="flex items-center space-x-3 flex-shrink-0">
+              <span class="font-mono text-zinc-500 text-[11px]">${res.duration}ms</span>
+              <span class="font-bold text-sm ${res.passed ? 'text-emerald-400' : 'text-red-500'}">${res.passed ? '✓ PASS' : '✗ FAIL'}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    document.getElementById('btn-rerun').addEventListener('click', execute);
+    execute();
+  </script>
+</body>
+</html>

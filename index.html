@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgendaVault - Lotus Agenda & nvALT Unified PIM</title>
+  <meta name="description" content="A powerful PIM combining Lotus Agenda's multi-dimensional categorization and views with nvALT's effortless search-and-create note taking." />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Marked.js CDN for MultiMarkdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Custom Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/retro-dos.css" />
+</head>
+<body class="theme-retro-dos h-screen flex flex-col overflow-hidden select-none bg-zinc-950 text-zinc-100">
+
+  <!-- TOP HEADER / APP BAR -->
+  <header class="h-14 border-b border-zinc-800 bg-zinc-900/90 backdrop-blur px-4 flex items-center justify-between flex-shrink-0 z-20">
+    <!-- Brand / Logo -->
+    <div class="flex items-center space-x-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-amber-400 via-yellow-300 to-orange-400 bg-clip-text text-transparent">
+          AgendaVault
+        </span>
+        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 hidden sm:inline-block">
+          Agenda 1989 &times; nvALT
+        </span>
+      </div>
+    </div>
+
+    <!-- View Switcher Tabs (Scrollable) -->
+    <div class="flex-1 max-w-2xl mx-4 overflow-x-auto no-scrollbar">
+      <div id="view-tabs-mount" class="flex items-center space-x-1 py-1">
+        <!-- Dynamically rendered view tabs -->
+      </div>
+    </div>
+
+    <!-- Header Actions & Controls -->
+    <div class="flex items-center space-x-2 flex-shrink-0">
+      <!-- AI / Generative UI Button -->
+      <button
+        id="btn-open-gen-ui"
+        class="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white font-bold text-xs shadow flex items-center gap-1.5 transition-all"
+        title="Open Generative AI Assistant"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        <span class="hidden md:inline">Generative AI</span>
+      </button>
+
+      <!-- Category & Rule Manager -->
+      <button
+        id="btn-open-categories"
+        class="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+        title="Categories & Assignment Rules (F6)"
+      >
+        <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        <span class="hidden lg:inline">Categories</span>
+      </button>
+
+      <!-- Macro Manager -->
+      <button
+        id="btn-open-macros"
+        class="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+        title="Macro Manager & Keys (Alt-F3)"
+      >
+        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+        <span class="hidden lg:inline">Macros</span>
+      </button>
+
+      <!-- Data Transfer Dropdown -->
+      <div class="relative group">
+        <button class="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium flex items-center gap-1 transition-colors">
+          <span>Transfer</span>
+          <svg class="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="absolute right-0 mt-1 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 hidden group-hover:block z-30 text-xs">
+          <button id="btn-export-stf" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-zinc-200 flex items-center justify-between">
+            <span>Export Agenda STF (.stf)</span>
+            <span class="font-mono text-[10px] text-zinc-400">1989</span>
+          </button>
+          <button id="btn-export-json" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-zinc-200">
+            Export JSON Backup
+          </button>
+          <button id="btn-export-markdown" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-zinc-200">
+            Export All Markdown Notes
+          </button>
+          <div class="border-t border-zinc-800 my-1"></div>
+          <button id="btn-import-file" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-amber-400">
+            Import File (.stf / .json)
+          </button>
+        </div>
+      </div>
+
+      <!-- Theme Switcher -->
+      <select id="theme-select" class="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200 font-mono focus:outline-none cursor-pointer">
+        <option value="retro-dos">📺 Retro DOS</option>
+        <option value="modern-dark">🌙 Dark</option>
+        <option value="modern-light">☀️ Light</option>
+      </select>
+
+      <!-- Layout Switcher -->
+      <select id="layout-select" class="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200 font-mono focus:outline-none cursor-pointer hidden sm:block">
+        <option value="agenda-full">Agenda Full</option>
+        <option value="nvalt-horizontal">nvALT Horiz</option>
+        <option value="nvalt-vertical">nvALT Vert</option>
+        <option value="editor-focus">Editor Focus</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- OMNIBAR SEARCH & CREATE STRIP -->
+  <div class="bg-zinc-950 px-4 py-2.5 border-b border-zinc-800 flex items-center space-x-3 flex-shrink-0 z-10">
+    <div id="omnibar-mount" class="flex-1">
+      <!-- Omnibar Component Mounted Here -->
+    </div>
+    <button
+      id="btn-new-item"
+      class="px-3.5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1.5 shadow transition-colors flex-shrink-0"
+    >
+      <span>+ New</span>
+    </button>
+  </div>
+
+  <!-- MAIN WORKSPACE DUAL PANE -->
+  <main id="main-workspace" class="flex-1 flex min-h-0 p-3 gap-3 overflow-hidden">
+    <!-- Left Pane: Agenda View -->
+    <section id="view-pane" class="w-7/12 overflow-y-auto flex flex-col min-h-0">
+      <!-- View Header Subtitle & Filter Badge -->
+      <div class="px-3 py-2 bg-zinc-900/90 border border-zinc-800 rounded-t-lg flex items-center justify-between text-xs flex-shrink-0">
+        <div class="flex items-center space-x-2">
+          <span id="active-view-title" class="font-bold text-zinc-100 uppercase tracking-wider">Main Dashboard</span>
+        </div>
+        <span id="active-view-filter" class="font-mono text-[11px] text-amber-400 bg-zinc-800/80 px-2 py-0.5 rounded border border-zinc-700">
+          Filter: [-Done, When(&lt;-&gt;A week from today)]
+        </span>
+      </div>
+
+      <!-- Mount point for active view component -->
+      <div id="view-content-mount" class="flex-1 overflow-y-auto border-x border-b border-zinc-800 rounded-b-lg p-3 bg-zinc-950/60">
+        <!-- Rendered by AgendaSectionsView / AgendaTableView / Datebook / Expense / Matrix -->
+      </div>
+    </section>
+
+    <!-- Right Pane: nvALT Note Editor & Live Preview -->
+    <section id="editor-pane-container" class="w-5/12 flex flex-col min-h-0">
+      <!-- Mounted by NoteEditor Component -->
+    </section>
+  </main>
+
+  <!-- RETRO DOS FUNCTION KEY FOOTER BAR (Agenda Style) -->
+  <footer class="h-7 bg-zinc-900 border-t border-zinc-800 px-4 flex items-center justify-between text-[11px] font-mono text-zinc-400 flex-shrink-0 overflow-x-auto whitespace-nowrap">
+    <div class="flex items-center space-x-4">
+      <span><strong class="text-amber-400">Ctrl+L</strong>:Omnibar</span>
+      <span><strong class="text-amber-400">F6</strong>:Categories</span>
+      <span><strong class="text-amber-400">F8</strong>:Views</span>
+      <span><strong class="text-amber-400">Alt-N</strong>:NextView</span>
+      <span><strong class="text-amber-400">Alt-P</strong>:PrevView</span>
+      <span><strong class="text-amber-400">Alt-F3</strong>:Macro</span>
+      <span><strong class="text-amber-400">[[WikiLink]]</strong>:NoteRef</span>
+    </div>
+    <div class="flex items-center space-x-2">
+      <a href="tests/test-runner.html" target="_blank" class="text-amber-400 hover:underline">Run Automated Tests &rarr;</a>
+    </div>
+  </footer>
+
+  <!-- MODAL MOUNT POINTS -->
+  <div id="modal-category-mount"></div>
+  <div id="modal-macro-mount"></div>
+  <div id="modal-gen-mount"></div>
+
+  <!-- Hidden File Input for STF/JSON Imports -->
+  <input type="file" id="file-import-input" class="hidden" accept=".stf,.json" />
+
+  <!-- Application Bootstrap Script -->
+  <script type="module">
+    import { App } from './js/app.js';
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const app = new App();
+      app.init();
+      window.AgendaVaultApp = app;
+    });
+  </script>
+</body>
+</html>
