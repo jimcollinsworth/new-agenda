@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgendaVault Test Runner - Unit & Browser End-to-End Suite</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body class="bg-zinc-950 text-zinc-100 p-8">
+  <div class="max-w-5xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-amber-400 flex items-center gap-2">
+          <span>AgendaVault Automated Test Suite</span>
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
+            Unit &times; Browser E2E
+          </span>
+        </h1>
+        <p class="text-xs text-zinc-400 mt-1">
+          Verifies Lotus Agenda NLP, Boolean Filters, President's Planner (ppdoc.pdf) Templates, Macro Language, Data Utilities, nvALT Search & Markdown Editor
+        </p>
+      </div>
+      <div class="flex items-center space-x-3">
+        <a href="../index.html" class="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs rounded-lg transition-colors">
+          &larr; Open AgendaVault App
+        </a>
+        <button id="btn-rerun" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-lg shadow transition-colors flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>Re-run All Tests</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Summary Metrics -->
+    <div id="test-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <span class="text-xs text-zinc-400 uppercase font-mono">Total Tests</span>
+        <div id="stat-total" class="text-2xl font-bold text-zinc-100 mt-1">-</div>
+      </div>
+      <div class="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <span class="text-xs text-zinc-400 uppercase font-mono">Passed</span>
+        <div id="stat-passed" class="text-2xl font-bold text-emerald-400 mt-1">-</div>
+      </div>
+      <div class="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <span class="text-xs text-zinc-400 uppercase font-mono">Failed</span>
+        <div id="stat-failed" class="text-2xl font-bold text-red-400 mt-1">-</div>
+      </div>
+      <div class="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+        <span class="text-xs text-zinc-400 uppercase font-mono">Total Duration</span>
+        <div id="stat-duration" class="text-2xl font-bold text-amber-400 mt-1">-</div>
+      </div>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
+      <div class="flex items-center space-x-2 text-xs">
+        <button id="filter-all" class="filter-tab px-3 py-1.5 rounded-lg bg-amber-500 text-black font-bold">All Tests</button>
+        <button id="filter-unit" class="filter-tab px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Unit Tests</button>
+        <button id="filter-e2e" class="filter-tab px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Browser E2E Tests</button>
+        <button id="filter-failed" class="filter-tab px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300">Failed Only</button>
+      </div>
+      <div id="status-spinner" class="hidden text-xs font-mono text-amber-400 flex items-center gap-1.5">
+        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+        <span>Running verification suite...</span>
+      </div>
+    </div>
+
+    <!-- Test Results List -->
+    <div id="test-results" class="space-y-2.5">
+      <div class="text-center py-12 text-zinc-500 font-mono">Initializing test runner...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { runAllTests } from './test-suite.js';
+    import { runBrowserE2ETests } from './e2e-suite.js';
+
+    let allResults = [];
+    let currentFilter = 'all';
+
+    async function execute() {
+      const spinner = document.getElementById('status-spinner');
+      const container = document.getElementById('test-results');
+      spinner.classList.remove('hidden');
+      container.innerHTML = '<div class="text-center py-12 text-amber-400 font-mono">Executing unit and end-to-end tests...</div>';
+
+      const startTime = performance.now();
+
+      // 1. Run Unit Tests
+      const unitResults = await runAllTests();
+
+      // 2. Run Browser E2E Tests
+      const e2eResults = await runBrowserE2ETests();
+
+      allResults = [...unitResults, ...e2eResults];
+      const totalDuration = (performance.now() - startTime).toFixed(1);
+
+      spinner.classList.add('hidden');
+
+      const total = allResults.length;
+      const passed = allResults.filter(r => r.passed).length;
+      const failed = total - passed;
+
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-passed').textContent = passed;
+      document.getElementById('stat-failed').textContent = failed;
+      document.getElementById('stat-duration').textContent = `${totalDuration}ms`;
+
+      renderResults();
+    }
+
+    function renderResults() {
+      const container = document.getElementById('test-results');
+      let filtered = allResults;
+
+      if (currentFilter === 'unit') {
+        filtered = allResults.filter(r => r.group !== 'Browser E2E');
+      } else if (currentFilter === 'e2e') {
+        filtered = allResults.filter(r => r.group === 'Browser E2E');
+      } else if (currentFilter === 'failed') {
+        filtered = allResults.filter(r => !r.passed);
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-center py-12 text-zinc-500 font-mono">No tests match current filter "${currentFilter}".</div>`;
+        return;
+      }
+
+      let html = '';
+      filtered.forEach((res) => {
+        const statusColor = res.passed
+          ? 'text-emerald-400 border-emerald-800/50 bg-emerald-950/20'
+          : 'text-red-400 border-red-800/60 bg-red-950/30';
+
+        const groupBadgeColor = res.group === 'Browser E2E'
+          ? 'bg-purple-900/60 text-purple-300 border-purple-700/50'
+          : 'bg-zinc-800 text-zinc-400 border-zinc-700';
+
+        html += `
+          <div class="p-3.5 rounded-lg border ${statusColor} flex items-center justify-between text-xs transition-colors">
+            <div class="space-y-1 flex-1 pr-4">
+              <div class="flex items-center space-x-2">
+                <span class="font-mono px-2 py-0.5 rounded border text-[10px] uppercase font-bold ${groupBadgeColor}">${res.group}</span>
+                <span class="font-bold text-zinc-100 text-sm">${res.name}</span>
+              </div>
+              ${res.error ? `
+                <div class="text-red-400 font-mono text-[11px] mt-1.5 pl-3 py-1 border-l-2 border-red-500 bg-red-950/40 rounded-r">
+                  ${res.error}
+                </div>
+              ` : ''}
+            </div>
+            <div class="flex items-center space-x-3 flex-shrink-0">
+              <span class="font-mono text-zinc-500 text-[11px]">${res.duration}ms</span>
+              <span class="font-bold text-xs px-2 py-0.5 rounded ${res.passed ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50' : 'bg-red-900/80 text-red-200 border border-red-700'}">
+                ${res.passed ? '✓ PASS' : '✗ FAIL'}
+              </span>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Filter bindings
+    const filterBtns = {
+      all: document.getElementById('filter-all'),
+      unit: document.getElementById('filter-unit'),
+      e2e: document.getElementById('filter-e2e'),
+      failed: document.getElementById('filter-failed')
+    };
+
+    Object.entries(filterBtns).forEach(([key, btn]) => {
+      btn.addEventListener('click', () => {
+        currentFilter = key;
+        Object.values(filterBtns).forEach(b => {
+          b.className = 'filter-tab px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold';
+        });
+        btn.className = 'filter-tab px-3 py-1.5 rounded-lg bg-amber-500 text-black text-xs font-bold';
+        renderResults();
+      });
+    });
+
+    document.getElementById('btn-rerun').addEventListener('click', execute);
+
+    // Initial run
+    execute();
+  </script>
+</body>
+</html>

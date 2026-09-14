@@ -1,0 +1,152 @@
+/* styles.css - Modern Clean Dark/Light styling for AgendaVault */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+
+:root {
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #09090b;
+  color: #f4f4f5;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #18181b;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Transitions */
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Markdown Rendering Typography */
+.prose {
+  color: #d4d4d8;
+}
+.prose h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #fafafa;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #27272a;
+  padding-bottom: 0.25rem;
+}
+.prose h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #f4f4f5;
+  margin-top: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+.prose h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  margin-top: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+.prose p {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.prose ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.prose ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.prose li {
+  margin-top: 0.2rem;
+  margin-bottom: 0.2rem;
+}
+.prose blockquote {
+  border-left: 3px solid #eab308;
+  padding-left: 0.75rem;
+  font-style: italic;
+  color: #a1a1aa;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.prose code {
+  font-family: var(--font-mono);
+  background-color: #18181b;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.82em;
+  color: #fbbf24;
+}
+.prose pre {
+  background-color: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+.prose pre code {
+  background: transparent;
+  padding: 0;
+  color: #e4e4e7;
+}
+.prose a {
+  color: #f59e0b;
+  text-decoration: underline;
+}
+
+/* Light Mode Overrides */
+body.theme-modern-light {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+body.theme-modern-light .bg-zinc-950 {
+  background-color: #ffffff !important;
+}
+body.theme-modern-light .bg-zinc-900 {
+  background-color: #f1f5f9 !important;
+}
+body.theme-modern-light .bg-zinc-800 {
+  background-color: #e2e8f0 !important;
+}
+body.theme-modern-light .border-zinc-800,
+body.theme-modern-light .border-zinc-700 {
+  border-color: #cbd5e1 !important;
+}
+body.theme-modern-light .text-zinc-100,
+body.theme-modern-light .text-zinc-200 {
+  color: #0f172a !important;
+}
+body.theme-modern-light .text-zinc-300,
+body.theme-modern-light .text-zinc-400 {
+  color: #475569 !important;
+}
+body.theme-modern-light .text-zinc-500 {
+  color: #64748b !important;
+}

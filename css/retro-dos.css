@@ -1,0 +1,82 @@
+/* retro-dos.css - Authentic Lotus Agenda 1989 MS-DOS VGA Terminal Styling */
+
+body.theme-retro-dos {
+  background-color: #000084 !important; /* Authentic Lotus 1-2-3 / Agenda DOS Blue */
+  color: #f1f1f1 !important;
+  font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+}
+
+body.theme-retro-dos .bg-zinc-950 {
+  background-color: #000055 !important;
+}
+
+body.theme-retro-dos .bg-zinc-900 {
+  background-color: #000077 !important;
+}
+
+body.theme-retro-dos .bg-zinc-800 {
+  background-color: #0000aa !important;
+}
+
+body.theme-retro-dos .border-zinc-800,
+body.theme-retro-dos .border-zinc-700 {
+  border-color: #00aaff !important;
+}
+
+body.theme-retro-dos input,
+body.theme-retro-dos select,
+body.theme-retro-dos textarea {
+  background-color: #000033 !important;
+  color: #ffff55 !important; /* Retro bright yellow input text */
+  border-color: #00aaaa !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+body.theme-retro-dos .text-amber-400,
+body.theme-retro-dos .text-amber-300 {
+  color: #ffff55 !important;
+}
+
+body.theme-retro-dos .text-zinc-100,
+body.theme-retro-dos .text-zinc-200 {
+  color: #ffffff !important;
+}
+
+body.theme-retro-dos .text-zinc-400,
+body.theme-retro-dos .text-zinc-500 {
+  color: #00ffff !important; /* Cyan DOS labels */
+}
+
+body.theme-retro-dos .section-header {
+  background-color: #00aaaa !important;
+  color: #000000 !important;
+}
+body.theme-retro-dos .section-title {
+  color: #000000 !important;
+  font-weight: bold !important;
+}
+
+body.theme-retro-dos .item-row:hover,
+body.theme-retro-dos .table-row:hover {
+  background-color: #0000cc !important;
+}
+
+body.theme-retro-dos .bg-amber-950\/30 {
+  background-color: #ffff55 !important;
+  color: #000000 !important;
+}
+body.theme-retro-dos .bg-amber-950\/30 .item-text {
+  color: #000000 !important;
+}
+
+/* Retro DOS Scanlines Effect */
+body.theme-retro-dos.scanlines::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 9999;
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+}
