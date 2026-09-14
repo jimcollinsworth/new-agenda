@@ -11,3 +11,19 @@
 
 3. **Ask for Help**:
    - If a tool or dependency is not immediately located, ask the user for direction before attempting workarounds.
+
+## Release & Documentation Standards
+
+1. **Version Synchronization**:
+   - Increment semantic version in `package.json` and update the badge in `index.html`.
+
+2. **Release Documentation**:
+   - Maintain `CHANGELOG.md` following the Keep a Changelog standard.
+   - Maintain `RELEASE_NOTES.md` for major user-facing release summaries.
+   - Maintain `JOURNAL.md` for architecture devlogs, design rationale, and project milestones.
+
+3. **Git Tagging & GitHub Releases**:
+   - Tag releases (`git tag -a vX.Y.Z -m "Release vX.Y.Z"`).
+   - Push commits and tags upstream (`git push origin main --tags`).
+   - Publish official releases via GitHub CLI (`gh release create vX.Y.Z --notes-file RELEASE_NOTES.md`).
+
