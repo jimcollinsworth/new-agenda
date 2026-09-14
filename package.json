@@ -1,7 +1,7 @@
 {
   "name": "new-agenda",
-  "version": "1.0.0",
-  "description": "Lotus Agenda and nvALT unified PIM web application with PowerPack templates & macros",
+  "version": "1.1.0",
+  "description": "Lotus Agenda and nvALT unified PIM web application with PowerPack templates, macros, and personal vaults",
   "type": "module",
   "scripts": {
     "start": "python -m http.server 8000",
@@ -14,7 +14,10 @@
     "pim",
     "notes",
     "productivity",
-    "markdown"
+    "markdown",
+    "powerpack",
+    "templates",
+    "macros"
   ],
   "author": "Jim Collinsworth",
   "license": "Apache-2.0"
