@@ -8,9 +8,12 @@ import { Category, CategoryValue } from '../models/Category.js';
 import { Rule } from '../models/Rule.js';
 import { View } from '../models/View.js';
 import { formatLocalDate, addDays } from '../utils/dateUtils.js';
+import { getPersonalSampleVaultData } from '../../data/personalSampleVault.js';
 
 const STORAGE_KEY = 'agendavault_data_v1';
 const SETTINGS_KEY = 'agendavault_settings_v1';
+
+const fallbackMemoryStore = new Map();
 
 export class StorageService {
   constructor() {
@@ -18,55 +21,131 @@ export class StorageService {
     this.settingsKey = SETTINGS_KEY;
   }
 
-  loadData() {
+  _getItem(key) {
     try {
-      if (typeof localStorage !== 'undefined') {
-        const raw = localStorage.getItem(this.storageKey);
-        if (!raw) {
-          return this.getDefaultData();
-        }
-        const data = JSON.parse(raw);
-
-        return {
-          items: (data.items || []).map(i => Item.fromJSON(i)),
-          categories: (data.categories || []).map(c => Category.fromJSON(c)),
-          rules: (data.rules || []).map(r => Rule.fromJSON(r)),
-          views: (data.views || []).map(v => View.fromJSON(v))
-        };
+      if (typeof localStorage !== 'undefined' && localStorage) {
+        return localStorage.getItem(key);
       }
-      return this.getDefaultData();
     } catch (e) {
-      console.error('Failed to load data from localStorage:', e);
-      return this.getDefaultData();
+      // Ignore security errors in restricted environments
+    }
+    return fallbackMemoryStore.get(key) || null;
+  }
+
+  _setItem(key, val) {
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage) {
+        localStorage.setItem(key, val);
+      }
+    } catch (e) {
+      // Ignore security errors in restricted environments
+    }
+    fallbackMemoryStore.set(key, String(val));
+  }
+
+  getVaultStorageKey(vaultType) {
+    const vt = vaultType || this.getActiveVault();
+    if (vt === 'personal') {
+      return `${this.storageKey}_personal`;
+    }
+    return `${this.storageKey}_demo`;
+  }
+
+  getActiveVault() {
+    const settings = this.loadSettings();
+    return settings.activeVault || 'demo';
+  }
+
+  loadData(vaultOverride = null) {
+    const activeVault = vaultOverride || this.getActiveVault();
+    try {
+      const vaultKey = this.getVaultStorageKey(activeVault);
+      const raw = this._getItem(vaultKey);
+      if (!raw) {
+        // Check fallback for demo vault (legacy storage key)
+        if (activeVault === 'demo') {
+          const legacyRaw = this._getItem(this.storageKey);
+          if (legacyRaw) {
+            const data = JSON.parse(legacyRaw);
+            if (!data.vault || data.vault === 'demo') {
+              return {
+                items: (data.items || []).map(i => Item.fromJSON(i)),
+                categories: (data.categories || []).map(c => Category.fromJSON(c)),
+                rules: (data.rules || []).map(r => Rule.fromJSON(r)),
+                views: (data.views || []).map(v => View.fromJSON(v))
+              };
+            }
+          }
+          return this.getDefaultData();
+        } else if (activeVault === 'personal') {
+          return this.getPersonalVaultData();
+        }
+        return this.getDefaultData();
+      }
+      const data = JSON.parse(raw);
+
+      return {
+        items: (data.items || []).map(i => Item.fromJSON(i)),
+        categories: (data.categories || []).map(c => Category.fromJSON(c)),
+        rules: (data.rules || []).map(r => Rule.fromJSON(r)),
+        views: (data.views || []).map(v => View.fromJSON(v))
+      };
+    } catch (e) {
+      console.error('Failed to load data from storage:', e);
+      return activeVault === 'personal' ? this.getPersonalVaultData() : this.getDefaultData();
     }
   }
 
-  saveData({ items, categories, rules, views }) {
+  saveData({ items, categories, rules, views }, vaultOverride = null) {
     try {
-      if (typeof localStorage !== 'undefined') {
-        const payload = {
-          version: 1,
-          savedAt: new Date().toISOString(),
-          items: items.map(i => i.toJSON()),
-          categories: categories.map(c => c.toJSON()),
-          rules: rules.map(r => r.toJSON()),
-          views: views.map(v => v.toJSON())
-        };
-        localStorage.setItem(this.storageKey, JSON.stringify(payload));
+      const activeVault = vaultOverride || this.getActiveVault();
+      const vaultKey = this.getVaultStorageKey(activeVault);
+
+      const payload = {
+        version: 1,
+        vault: activeVault,
+        savedAt: new Date().toISOString(),
+        items: items.map(i => i.toJSON()),
+        categories: categories.map(c => c.toJSON()),
+        rules: rules.map(r => r.toJSON()),
+        views: views.map(v => v.toJSON())
+      };
+      const str = JSON.stringify(payload);
+      this._setItem(vaultKey, str);
+      if (activeVault === 'demo') {
+        this._setItem(this.storageKey, str);
       }
     } catch (e) {
-      console.error('Failed to save data to localStorage:', e);
+      console.error('Failed to save data to storage:', e);
     }
+  }
+
+  switchVault(targetVault = 'personal') {
+    const validVault = targetVault === 'personal' ? 'personal' : 'demo';
+    const settings = this.loadSettings();
+    settings.activeVault = validVault;
+    this.saveSettings(settings);
+
+    let data = this.loadData(validVault);
+    this.saveData(data, validVault);
+    return data;
+  }
+
+  getPersonalVaultData() {
+    return getPersonalSampleVaultData();
+  }
+
+  resetVaultToPreset(vaultType = 'personal') {
+    const data = vaultType === 'personal' ? this.getPersonalVaultData() : this.getDefaultData();
+    this.saveData(data, vaultType);
+    return data;
   }
 
   loadSettings() {
     try {
-      if (typeof localStorage !== 'undefined') {
-        const raw = localStorage.getItem(this.settingsKey);
-        if (!raw) return this.getDefaultSettings();
-        return { ...this.getDefaultSettings(), ...JSON.parse(raw) };
-      }
-      return this.getDefaultSettings();
+      const raw = this._getItem(this.settingsKey);
+      if (!raw) return this.getDefaultSettings();
+      return { ...this.getDefaultSettings(), ...JSON.parse(raw) };
     } catch (e) {
       return this.getDefaultSettings();
     }
@@ -74,9 +153,7 @@ export class StorageService {
 
   saveSettings(settings) {
     try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(this.settingsKey, JSON.stringify(settings));
-      }
+      this._setItem(this.settingsKey, JSON.stringify(settings));
     } catch (e) {
       console.error('Failed to save settings:', e);
     }
@@ -86,6 +163,7 @@ export class StorageService {
     return {
       theme: 'retro-dos', // 'retro-dos', 'modern-dark', 'modern-light'
       layout: 'agenda-full', // 'agenda-full', 'nvalt-horizontal', 'nvalt-vertical', 'editor-focus'
+      activeVault: 'demo', // 'demo' or 'personal'
       activeViewId: 'view_main_dashboard',
       autoCategorize: true,
       editorFontSize: 14,

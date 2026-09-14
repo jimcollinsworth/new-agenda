@@ -15,7 +15,20 @@ import { STFService } from '../js/services/stfService.js';
 import { TemplateService } from '../js/services/templateService.js';
 import { MacroEngine } from '../js/services/macroEngine.js';
 import { DataUtilities } from '../js/services/dataUtilities.js';
+import { StorageService } from '../js/services/storageService.js';
+import { getPersonalSampleVaultData } from '../data/personalSampleVault.js';
 import { formatLocalDate, addDays, parseLocalDate } from '../js/utils/dateUtils.js';
+
+// Polyfill localStorage in test environments where not present
+if (typeof globalThis.localStorage === 'undefined') {
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => store.get(key) || null,
+    setItem: (key, val) => store.set(key, String(val)),
+    removeItem: (key) => store.delete(key),
+    clear: () => store.clear()
+  };
+}
 
 export async function runAllTests() {
   const results = [];
@@ -800,6 +813,117 @@ export async function runAllTests() {
     // Purge completed
     const remaining = DataUtilities.purgeCompletedItems(items);
     assert(remaining.length === 1 && remaining[0].text === 'Task 2', 'Only uncompleted items should remain');
+  });
+
+  // --- 13. Personal Sample Vault & Privacy Redaction Tests ---
+  test('Personal Sample Vault', 'Parse and validate 70+ personal todo items with full categories', () => {
+    const vault = getPersonalSampleVaultData();
+    assert(vault.items.length >= 60, `Expected at least 60 items, got ${vault.items.length}`);
+    assert(vault.categories.length >= 8, 'Should include all core categories');
+    assert(vault.views.length >= 8, 'Should include all 8 AgendaVault views');
+
+    // Verify all items have valid text, non-empty When, valid project
+    vault.items.forEach((item, idx) => {
+      assert(item.text && item.text.length > 0, `Item ${idx} should have non-empty text`);
+      assert(item.text.length <= 200, `Item ${idx} headline should be <= 200 chars: "${item.text.slice(0, 40)}..."`);
+      assert(item.getCategory('When'), `Item ${idx} should have When category`);
+      assert(item.getCategory('Project'), `Item ${idx} should have Project category`);
+      assert(item.getCategory('Status'), `Item ${idx} should have Status category`);
+    });
+
+    // Verify people categorization
+    const withDenise = vault.items.filter(i => (i.getCategory('People') || []).includes('Denise'));
+    assert(withDenise.length >= 1, 'Should find item with Denise');
+
+    const withDrJames = vault.items.filter(i => (i.getCategory('People') || []).includes('Dr James'));
+    assert(withDrJames.length >= 1, 'Should find item with Dr James');
+
+    const withIlana = vault.items.filter(i => (i.getCategory('People') || []).includes('Ilana'));
+    assert(withIlana.length >= 3, 'Should find items with Ilana');
+  });
+
+  test('Personal Sample Vault', 'CRITICAL PRIVACY RULE: Ensure sensitive numbers and identifiers are redacted', () => {
+    const vault = getPersonalSampleVaultData();
+    const forbiddenPatterns = [
+      'XOJ804513136',
+      '1952425035',
+      'H3822-001-0',
+      '1-800-583-8129',
+      '800-583-8129',
+      '877-583-8129',
+      'H8634-016-0',
+      '1376002057',
+      '18006385656',
+      'EL14145',
+      'OBNEXU',
+      'DVAZZ-29VPF',
+      'TMB3884398'
+    ];
+
+    vault.items.forEach((item, idx) => {
+      const combined = `${item.text} ${item.note}`;
+      forbiddenPatterns.forEach(pattern => {
+        assert(!combined.includes(pattern), `Item ${idx} contains sensitive unredacted pattern: ${pattern}`);
+      });
+    });
+
+    // Confirm redaction placeholders exist
+    const allNotes = vault.items.map(i => i.note).join('\n');
+    assert(allNotes.includes('[REDACTED-PLAN-ID]'), 'Should contain redacted plan id placeholder');
+    assert(allNotes.includes('[REDACTED-PHONE]'), 'Should contain redacted phone placeholder');
+    assert(allNotes.includes('[REDACTED-ACH-ID]'), 'Should contain redacted ACH id placeholder');
+    assert(allNotes.includes('[REDACTED-ORDER-ID]'), 'Should contain redacted order id placeholder');
+    assert(allNotes.includes('[REDACTED-FLIGHT-CONF]'), 'Should contain redacted flight confirmation placeholder');
+    assert(allNotes.includes('[REDACTED-LICENSE-KEY]'), 'Should contain redacted license key placeholder');
+    assert(allNotes.includes('[REDACTED-SERIAL-NUM]'), 'Should contain redacted serial number placeholder');
+  });
+
+  test('Personal Sample Vault', 'STF & JSON Roundtrip serialization', () => {
+    const vault = getPersonalSampleVaultData();
+
+    // 1. STF Roundtrip
+    const stf = STFService.exportToSTF(vault.items, vault.categories);
+    assert(stf.includes('\\Categories\\'), 'STF should contain Categories section');
+    assert(stf.includes('\\Items\\'), 'STF should contain Items section');
+    assert(stf.includes('\\CatVal\\Project\\Health\\'), 'STF should contain CatVal for Health');
+
+    const importedFromSTF = STFService.importFromSTF(stf);
+    assert(importedFromSTF.items.length === vault.items.length, `Expected ${vault.items.length} STF imported items, got ${importedFromSTF.items.length}`);
+
+    // 2. JSON Roundtrip
+    const json = STFService.exportToJSON({
+      items: vault.items,
+      categories: vault.categories,
+      rules: vault.rules,
+      views: vault.views
+    });
+    const importedFromJSON = STFService.importFromJSON(json);
+    assert(importedFromJSON.items.length === vault.items.length, 'JSON roundtrip item count should match');
+  });
+
+  test('Personal Sample Vault', 'StorageService 1-click vault switching & isolation', () => {
+    const storage = new StorageService();
+
+    // Switch to personal vault
+    const personalData = storage.switchVault('personal');
+    assert(storage.getActiveVault() === 'personal', 'Active vault should be personal');
+    assert(personalData.items.length >= 60, 'Personal vault should have 60+ items');
+
+    // Mutate personal vault
+    personalData.items.push(new Item({ text: 'Temporary Personal Task' }));
+    storage.saveData(personalData, 'personal');
+
+    // Switch to demo vault
+    const demoData = storage.switchVault('demo');
+    assert(storage.getActiveVault() === 'demo', 'Active vault should be demo');
+    assert(demoData.items.length > 0, 'Demo vault should have items');
+    assert(demoData.items.some(i => i.text.includes('Sarah') || i.text.includes('Death Star')), 'Demo vault should contain original sample tasks');
+    assert(!demoData.items.some(i => i.text === 'Temporary Personal Task'), 'Demo vault should not have personal items');
+
+    // Reset personal vault to preset
+    const resetData = storage.resetVaultToPreset('personal');
+    assert(!resetData.items.some(i => i.text === 'Temporary Personal Task'), 'Reset personal vault should not have mutated item');
+    assert(resetData.items.length >= 60, 'Reset personal vault should restore all items');
   });
 
   return results;

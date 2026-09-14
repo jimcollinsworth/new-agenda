@@ -92,13 +92,32 @@
         <span class="hidden lg:inline">Macros</span>
       </button>
 
+      <!-- 1-Click Vault Switcher Preset -->
+      <div class="relative flex items-center">
+        <select id="vault-select" class="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-semibold focus:outline-none cursor-pointer" title="Switch between Demo Vault and Personal Sample Vault">
+          <option value="demo">🏛️ Demo Vault</option>
+          <option value="personal">👤 Personal Sample Vault</option>
+        </select>
+      </div>
+
       <!-- Data Transfer Dropdown -->
       <div class="relative group">
         <button class="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium flex items-center gap-1 transition-colors">
           <span>Transfer</span>
           <svg class="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-        <div class="absolute right-0 mt-1 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 hidden group-hover:block z-30 text-xs">
+        <div class="absolute right-0 mt-1 w-56 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 hidden group-hover:block z-30 text-xs">
+          <div class="px-3 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Active Vault Preset</div>
+          <button id="btn-switch-demo-vault" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-zinc-200 flex items-center justify-between">
+            <span>🏛️ Demo Vault</span>
+            <span id="badge-demo-vault" class="text-[10px] text-amber-400 font-bold">&#10003;</span>
+          </button>
+          <button id="btn-switch-personal-vault" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-amber-300 flex items-center justify-between">
+            <span>👤 Personal Sample Vault</span>
+            <span id="badge-personal-vault" class="text-[10px] text-amber-400 font-bold hidden">&#10003;</span>
+          </button>
+          <div class="border-t border-zinc-800 my-1"></div>
+          <div class="px-3 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Export / Import</div>
           <button id="btn-export-stf" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-zinc-200 flex items-center justify-between">
             <span>Export Agenda STF (.stf)</span>
             <span class="font-mono text-[10px] text-zinc-400">1989</span>
@@ -112,6 +131,9 @@
           <div class="border-t border-zinc-800 my-1"></div>
           <button id="btn-import-file" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-amber-400">
             Import File (.stf / .json)
+          </button>
+          <button id="btn-reset-personal-preset" class="w-full text-left px-3 py-2 hover:bg-zinc-800 text-emerald-400">
+            Reset Personal Vault Preset
           </button>
         </div>
       </div>

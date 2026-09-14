@@ -492,6 +492,39 @@ export class App {
       this.genModal.show();
     });
 
+    // 1-Click Vault Switcher controls
+    const vaultSelect = document.getElementById('vault-select');
+    if (vaultSelect) {
+      vaultSelect.value = this.settings.activeVault || 'demo';
+      vaultSelect.addEventListener('change', (e) => {
+        this.switchVault(e.target.value);
+      });
+    }
+
+    const updateVaultBadges = () => {
+      const activeVault = this.settings.activeVault || 'demo';
+      const badgeDemo = document.getElementById('badge-demo-vault');
+      const badgePersonal = document.getElementById('badge-personal-vault');
+      if (badgeDemo) badgeDemo.classList.toggle('hidden', activeVault !== 'demo');
+      if (badgePersonal) badgePersonal.classList.toggle('hidden', activeVault !== 'personal');
+      if (vaultSelect) vaultSelect.value = activeVault;
+    };
+    updateVaultBadges();
+
+    document.getElementById('btn-switch-demo-vault')?.addEventListener('click', () => {
+      this.switchVault('demo');
+    });
+
+    document.getElementById('btn-switch-personal-vault')?.addEventListener('click', () => {
+      this.switchVault('personal');
+    });
+
+    document.getElementById('btn-reset-personal-preset')?.addEventListener('click', () => {
+      if (confirm('Reset Personal Sample Vault to pristine preset data?')) {
+        this.resetVaultToPreset('personal');
+      }
+    });
+
     // Data Transfer (Import / Export) buttons
     document.getElementById('btn-export-stf').addEventListener('click', () => {
       const stf = STFService.exportToSTF(this.items, this.categories);
@@ -548,6 +581,59 @@ export class App {
       };
       reader.readAsText(file);
     });
+  }
+
+  // --- Vault Switching & Presets ---
+  switchVault(targetVault, skipSaveCurrent = false) {
+    if (!skipSaveCurrent) {
+      this.saveAll();
+    }
+    const data = this.storage.switchVault(targetVault);
+    this.items = data.items;
+    this.categories = data.categories;
+    this.rules = data.rules;
+    this.views = data.views;
+    this.settings = this.storage.loadSettings();
+    this.nlpEngine = new NLPEngine({ categories: this.categories });
+
+    this.activeView = this.views.find(v => v.id === this.settings.activeViewId) || this.views[0];
+
+    if (this.noteEditor) {
+      this.noteEditor.setCategories(this.categories);
+      this.noteEditor.setAllItems(this.items);
+    }
+
+    if (this.categoryModal) {
+      this.categoryModal.categories = this.categories;
+      this.categoryModal.rules = this.rules;
+    }
+
+    if (this.genModal) {
+      this.genModal.allItems = this.items;
+      this.genModal.categories = this.categories;
+      this.genModal.views = this.views;
+    }
+
+    const vaultSelect = document.getElementById('vault-select');
+    if (vaultSelect) vaultSelect.value = targetVault;
+    const badgeDemo = document.getElementById('badge-demo-vault');
+    const badgePersonal = document.getElementById('badge-personal-vault');
+    if (badgeDemo) badgeDemo.classList.toggle('hidden', targetVault !== 'demo');
+    if (badgePersonal) badgePersonal.classList.toggle('hidden', targetVault !== 'personal');
+
+    this.renderViewSwitcher();
+    this.renderCurrentView();
+    this.updateTriageBadge();
+
+    if (this.items.length > 0) {
+      this.selectItem(this.items[0].id);
+    }
+  }
+
+  resetVaultToPreset(targetVault = 'personal') {
+    const data = this.storage.resetVaultToPreset(targetVault);
+    this.switchVault(targetVault, true);
+    alert(`Reset ${targetVault === 'personal' ? 'Personal Sample Vault' : 'Demo Vault'} preset with ${data.items.length} items.`);
   }
 
   renderViewSwitcher() {
