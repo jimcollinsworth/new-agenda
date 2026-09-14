@@ -16,6 +16,7 @@
  */
 
 import { NLPEngine } from './nlpEngine.js';
+import { DataUtilities } from './dataUtilities.js';
 import { formatLocalDate, addDays } from '../utils/dateUtils.js';
 
 export class FilterEngine {
@@ -123,6 +124,21 @@ export class FilterEngine {
   parseSingleCondition(token, refDate) {
     token = token.trim();
     if (!token) return null;
+
+    // Check for OR groups: e.g. "-When | -Project" or "-When OR -Project"
+    if (token.includes('|') || /\bOR\b/i.test(token)) {
+      const parts = token.split(/\s*\|\s*|\s+OR\s+/i).map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        const subConditions = parts.map(p => this.parseSingleCondition(p, refDate)).filter(Boolean);
+        return { type: 'or_group', conditions: subConditions };
+      }
+    }
+
+    // Special Ambiguous Statements condition: [Ambiguous] or [?Ambiguous]
+    const lowerToken = token.toLowerCase();
+    if (lowerToken === 'ambiguous' || lowerToken === '?ambiguous' || lowerToken === '? ambiguous' || lowerToken === '+ambiguous') {
+      return { type: 'ambiguous' };
+    }
 
     // Range syntax with arrow variations:
     // CategoryName(start <-> end), CategoryName(start <->), CategoryName(<- > end), CategoryName(<- end)
@@ -278,6 +294,15 @@ export class FilterEngine {
 
     return conditions.every(cond => {
       switch (cond.type) {
+        case 'ambiguous': {
+          const ambList = DataUtilities.findAmbiguousItems([item]);
+          return ambList.length > 0;
+        }
+
+        case 'or_group': {
+          return cond.conditions.some(subCond => this.matchesConditions(item, [subCond], refDate));
+        }
+
         case 'done_state':
           return item.done === cond.value;
 

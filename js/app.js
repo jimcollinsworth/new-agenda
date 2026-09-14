@@ -187,9 +187,12 @@ export class App {
       container,
       nlpEngine: this.nlpEngine,
       onSearch: (query) => {
-        // Omnibar template command shortcut
-        if (query.trim().toLowerCase().startsWith('/template') || query.trim().toLowerCase().startsWith('/t ')) {
-          const tplName = query.trim().replace(/^\/(?:template|t)\s*/i, '').trim();
+        const trimmed = query.trim();
+        const lower = trimmed.toLowerCase();
+
+        // Omnibar template command shortcut (/template or /t)
+        if (lower.startsWith('/template') || lower.startsWith('/t ') || lower === '/t') {
+          const tplName = trimmed.replace(/^\/(?:template|t)\s*/i, '').trim();
           if (tplName) {
             const found = this.templateService.getItemTemplateById(tplName);
             if (found) {
@@ -197,6 +200,25 @@ export class App {
             }
           }
           this.templateModal.show('items');
+          this.omnibar.clear();
+          return;
+        }
+
+        // Omnibar macro shortcut (/macro or /m)
+        if (lower.startsWith('/macro') || lower.startsWith('/m ') || lower === '/m') {
+          const script = trimmed.replace(/^\/(?:macro|m)\s*/i, '').trim();
+          this.macroModal.show(script ? 'cli' : 'registry');
+          if (script) {
+            const cliInput = document.getElementById('macro-cli-input');
+            if (cliInput) cliInput.value = script;
+          }
+          this.omnibar.clear();
+          return;
+        }
+
+        // Omnibar triage shortcut (/triage or /?)
+        if (lower === '/triage' || lower === '/?') {
+          this.triageModal.show();
           this.omnibar.clear();
           return;
         }

@@ -4,6 +4,8 @@
  * and Item/Note boilerplate expansion templates (e.g. Meeting Note, Delegated Follow-up).
  */
 
+import { formatLocalDate } from '../utils/dateUtils.js';
+
 export class WorkspaceTemplate {
   constructor({
     id,
@@ -78,7 +80,7 @@ export class ItemTemplate {
     const merged = { ...values };
 
     // Default variable fallbacks
-    if (!merged.date) merged.date = new Date().toISOString().split('T')[0];
+    if (!merged.date) merged.date = formatLocalDate(new Date());
     if (!merged.title) merged.title = 'Untitled Note';
     if (!merged.person) merged.person = 'Unassigned';
     if (!merged.project) merged.project = 'General';

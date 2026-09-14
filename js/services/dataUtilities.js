@@ -29,6 +29,10 @@ export class DataUtilities {
       // Completed items don't need ambiguous triage
       if (item.done) return;
 
+      const isAmbiguous = item.getCategory('Ambiguous');
+      // Skip explicitly dismissed items
+      if (isAmbiguous === 'Dismissed' || isAmbiguous === 'No' || isAmbiguous === false || item.dismissedAmbiguous) return;
+
       const reasons = [];
       const when = item.getCategory('When');
       const project = item.getCategory('Project');
@@ -36,9 +40,8 @@ export class DataUtilities {
       const type = item.getCategory('Type');
       const priority = item.getCategory('Priority');
       const status = item.getCategory('Status');
-      const isAmbiguous = item.getCategory('Ambiguous');
 
-      if (isAmbiguous) {
+      if (isAmbiguous === true || isAmbiguous === 'Yes' || isAmbiguous === 'Ambiguous') {
         reasons.push('Explicitly flagged as ambiguous');
       }
 
@@ -95,6 +98,7 @@ export class DataUtilities {
 
     // Remove explicit Ambiguous flag once resolved
     item.setCategory('Ambiguous', null);
+    item.dismissedAmbiguous = false;
   }
 
   /**

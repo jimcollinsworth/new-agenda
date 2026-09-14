@@ -6,6 +6,8 @@
 
 import { App } from '../js/app.js';
 import { Item } from '../js/models/Item.js';
+import { DataUtilities } from '../js/services/dataUtilities.js';
+import { STFService } from '../js/services/stfService.js';
 import { formatLocalDate, addDays } from '../js/utils/dateUtils.js';
 
 export async function runBrowserE2ETests() {
@@ -159,22 +161,25 @@ export async function runBrowserE2ETests() {
       const initialCount = app.items.length;
 
       // 1. Phone call
-      const callItem = app.macroEngine.dispatchCommand({
-        command: 'ADD',
-        args: 'Call Sarah this Friday regarding contract',
-        params: { _clean: 'Call Sarah this Friday regarding contract' }
-      });
-      assert(callItem.itemId, 'Should create call item');
+      const callItem = DataUtilities.classifyScratchPadText('Call Sarah this Friday regarding contract', app.nlpEngine);
+      assert(callItem.getCategory('Type') === 'Call', 'Should classify as Call');
+      assert(callItem.getCategory('People') && callItem.getCategory('People').includes('Sarah'), 'Should parse person Sarah');
+      app.addItemWithRules(callItem);
 
       // 2. Delegated follow-up
-      const delegatedItem = app.macroEngine.dispatchCommand({
-        command: 'ADD',
-        args: 'Follow up on Tom promised compliance report next week',
-        params: { _clean: 'Follow up on Tom promised compliance report next week', person: 'Tom', status: 'Delegated' }
-      });
-      assert(delegatedItem.itemId, 'Should create delegated item');
+      const delegatedItem = DataUtilities.classifyScratchPadText('Tom promised compliance report next week', app.nlpEngine);
+      assert(delegatedItem.getCategory('Type') === 'Follow-up', 'Should classify as Follow-up');
+      assert(delegatedItem.getCategory('Status') === 'Delegated', 'Should set status to Delegated');
+      assert(delegatedItem.getCategory('DelegatedTo') === 'Tom', 'Should set DelegatedTo Tom');
+      app.addItemWithRules(delegatedItem);
 
-      assert(app.items.length === initialCount + 2, 'Should have added 2 items');
+      // 3. Expense
+      const expenseItem = DataUtilities.classifyScratchPadText('Lunch receipt with client $55.00', app.nlpEngine);
+      assert(expenseItem.getCategory('Type') === 'Expense', 'Should classify as Expense');
+      assert(expenseItem.cost === 55, 'Should parse cost 55');
+      app.addItemWithRules(expenseItem);
+
+      assert(app.items.length === initialCount + 3, 'Should have added 3 DWIM classified items');
     });
 
     // 5. Template Manager Modal: Note Boilerplate Expansion
@@ -234,24 +239,42 @@ export async function runBrowserE2ETests() {
     });
 
     // 8. ? Ambiguous Statements Triage Center
-    await test('? Ambiguous Statements detects incomplete items and resolves with 1-click pills', async () => {
-      // Add a deliberately ambiguous item (no date, no project)
-      const ambItem = new Item({ text: 'Incomplete random scratch note', categories: { Status: 'Pending' } });
-      app.items.unshift(ambItem);
+    await test('? Ambiguous Statements detects incomplete items and resolves with 1-click pills and dismissal', async () => {
+      // Add deliberately ambiguous items
+      const ambItem1 = new Item({ text: 'Incomplete random scratch note', categories: { Status: 'Pending' } });
+      const ambItem2 = new Item({ text: 'Dismissable vague task', categories: { Status: 'Pending' } });
+      app.items.unshift(ambItem1, ambItem2);
 
-      const ambiguousList = app.triageModal.getItems ? app.triageModal.getItems() : app.items;
-      const initialAmbiguous = app.macroEngine.dispatchCommand({ command: 'TRIAGE', args: '', params: {} });
-      assert(initialAmbiguous.count >= 1, 'Should detect at least 1 ambiguous item');
+      app.triageModal.show();
+      const modalEl = document.getElementById('triage-modal');
+      assert(!modalEl.classList.contains('hidden'), 'Triage modal must be visible');
 
-      // Resolve the ambiguous item
-      const todayStr = formatLocalDate(new Date());
-      ambItem.setCategory('When', todayStr);
-      ambItem.setCategory('Project', 'Website Redesign');
-      ambItem.setCategory('Priority', 'High');
+      // Test clicking 1-click pill for When on ambItem1
+      const whenPill = modalEl.querySelector(`.pill-resolve[data-id="${ambItem1.id}"][data-cat="when"]`);
+      assert(Boolean(whenPill), 'When pill must exist for ambiguous card');
+      whenPill.click();
+      assert(Boolean(ambItem1.getCategory('When')), 'Clicking When pill should set date on item');
 
-      app.saveAll();
-      assert(ambItem.getCategory('When') === todayStr, 'Date should be resolved');
-      assert(ambItem.getCategory('Project') === 'Website Redesign', 'Project should be resolved');
+      // Test clicking Dismiss button on ambItem2
+      const dismissBtn = modalEl.querySelector(`.btn-dismiss-triage[data-id="${ambItem2.id}"]`);
+      assert(Boolean(dismissBtn), 'Dismiss button must exist on ambiguous card');
+      dismissBtn.click();
+      assert(ambItem2.getCategory('Ambiguous') === 'Dismissed', 'Dismiss button should mark item as Dismissed');
+
+      // Verify ambItem2 no longer appears in ambiguous list
+      const ambListAfterDismiss = DataUtilities.findAmbiguousItems(app.items);
+      assert(!ambListAfterDismiss.some(i => i.item.id === ambItem2.id), 'Dismissed item must not be in ambiguous list');
+
+      // Test Auto-Resolve All button
+      const autoResolveBtn = document.getElementById('btn-triage-resolve-all');
+      assert(Boolean(autoResolveBtn), 'Auto-Resolve All button must exist');
+      autoResolveBtn.click();
+
+      const remainingAmbiguous = DataUtilities.findAmbiguousItems(app.items);
+      assert(remainingAmbiguous.length === 0, 'Auto-resolve all should clear all remaining ambiguous items');
+
+      app.triageModal.hide();
+      assert(modalEl.classList.contains('hidden'), 'Triage modal should hide');
     });
 
     // 9. Overdue Task Rollover (Perpetual Tracking)
@@ -291,10 +314,9 @@ export async function runBrowserE2ETests() {
       assert(editor.currentItem.id === sourceItem.id, 'Source item should be loaded in editor');
 
       // Check rendered markdown preview
-      const previewEl = document.querySelector('.note-preview-content');
-      if (previewEl) {
-        assert(previewEl.innerHTML.includes('wikilink-badge') || previewEl.innerHTML.includes('Design System Guidelines'), 'WikiLink badge should be rendered');
-      }
+      const previewEl = document.querySelector('#markdown-output');
+      assert(Boolean(previewEl), '#markdown-output element must exist in DOM');
+      assert(previewEl.innerHTML.includes('wikilink') && previewEl.innerHTML.includes('Design System Guidelines'), 'WikiLink badge should be rendered in preview');
 
       // Simulate WikiLink navigation
       editor.onNavigateWikiLink('Design System Guidelines');
@@ -303,11 +325,24 @@ export async function runBrowserE2ETests() {
 
     // 11. Data Transfer STF Export & Import Roundtrip
     await test('STF export and import roundtrip preserves items, categories, and notes', async () => {
-      const exportText = app.storage ? app.items : [];
-      assert(exportText.length > 0, 'Workspace must have items to export');
+      assert(app.items.length > 0, 'Workspace must have items to export');
 
-      const macroExport = app.macroEngine.dispatchCommand({ command: 'EXPORT', args: 'stf', params: {} });
-      assert(macroExport.message.includes('export'), 'Export command should execute cleanly');
+      // Export items and categories to STF format
+      const stfText = STFService.exportToSTF(app.items, app.categories);
+      assert(typeof stfText === 'string' && stfText.length > 0, 'STF export must produce non-empty string');
+      assert(stfText.includes('\\Items\\') && stfText.includes('\\Categories\\'), 'STF output must contain Items and Categories headers');
+
+      // Import STF into parsed data
+      const imported = STFService.importFromSTF(stfText);
+      assert(imported.items.length === app.items.length, `Expected ${app.items.length} imported items, got ${imported.items.length}`);
+
+      // Verify individual item attributes survived roundtrip
+      const sourceSample = app.items[0];
+      const matchSample = imported.items.find(i => i.text === sourceSample.text);
+      assert(Boolean(matchSample), `Should find item "${sourceSample.text}" in imported STF items`);
+      if (sourceSample.note) {
+        assert(matchSample.note === sourceSample.note, 'Note content must match after roundtrip');
+      }
     });
 
   } finally {

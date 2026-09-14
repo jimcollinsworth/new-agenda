@@ -20,18 +20,21 @@ export class StorageService {
 
   loadData() {
     try {
-      const raw = localStorage.getItem(this.storageKey);
-      if (!raw) {
-        return this.getDefaultData();
-      }
-      const data = JSON.parse(raw);
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(this.storageKey);
+        if (!raw) {
+          return this.getDefaultData();
+        }
+        const data = JSON.parse(raw);
 
-      return {
-        items: (data.items || []).map(i => Item.fromJSON(i)),
-        categories: (data.categories || []).map(c => Category.fromJSON(c)),
-        rules: (data.rules || []).map(r => Rule.fromJSON(r)),
-        views: (data.views || []).map(v => View.fromJSON(v))
-      };
+        return {
+          items: (data.items || []).map(i => Item.fromJSON(i)),
+          categories: (data.categories || []).map(c => Category.fromJSON(c)),
+          rules: (data.rules || []).map(r => Rule.fromJSON(r)),
+          views: (data.views || []).map(v => View.fromJSON(v))
+        };
+      }
+      return this.getDefaultData();
     } catch (e) {
       console.error('Failed to load data from localStorage:', e);
       return this.getDefaultData();
@@ -40,15 +43,17 @@ export class StorageService {
 
   saveData({ items, categories, rules, views }) {
     try {
-      const payload = {
-        version: 1,
-        savedAt: new Date().toISOString(),
-        items: items.map(i => i.toJSON()),
-        categories: categories.map(c => c.toJSON()),
-        rules: rules.map(r => r.toJSON()),
-        views: views.map(v => v.toJSON())
-      };
-      localStorage.setItem(this.storageKey, JSON.stringify(payload));
+      if (typeof localStorage !== 'undefined') {
+        const payload = {
+          version: 1,
+          savedAt: new Date().toISOString(),
+          items: items.map(i => i.toJSON()),
+          categories: categories.map(c => c.toJSON()),
+          rules: rules.map(r => r.toJSON()),
+          views: views.map(v => v.toJSON())
+        };
+        localStorage.setItem(this.storageKey, JSON.stringify(payload));
+      }
     } catch (e) {
       console.error('Failed to save data to localStorage:', e);
     }
@@ -56,9 +61,12 @@ export class StorageService {
 
   loadSettings() {
     try {
-      const raw = localStorage.getItem(this.settingsKey);
-      if (!raw) return this.getDefaultSettings();
-      return { ...this.getDefaultSettings(), ...JSON.parse(raw) };
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(this.settingsKey);
+        if (!raw) return this.getDefaultSettings();
+        return { ...this.getDefaultSettings(), ...JSON.parse(raw) };
+      }
+      return this.getDefaultSettings();
     } catch (e) {
       return this.getDefaultSettings();
     }
@@ -66,7 +74,9 @@ export class StorageService {
 
   saveSettings(settings) {
     try {
-      localStorage.setItem(this.settingsKey, JSON.stringify(settings));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(this.settingsKey, JSON.stringify(settings));
+      }
     } catch (e) {
       console.error('Failed to save settings:', e);
     }
@@ -277,6 +287,26 @@ export class StorageService {
         matrixRowCategory: 'Project',
         matrixColCategory: 'Status',
         filterExpression: '',
+        isBuiltin: true
+      }),
+      new View({
+        id: 'view_delegated_promises',
+        name: 'Follow-Ups & Delegated Promises',
+        description: 'Monitor tasks and promises delegated to others to prevent them falling through cracks',
+        type: 'table',
+        sectionCategory: 'Project',
+        columns: ['When', 'People', 'Project', 'Priority', 'Status'],
+        filterExpression: '[+Status:Delegated]',
+        isBuiltin: true
+      }),
+      new View({
+        id: 'view_ambiguous_triage',
+        name: '? Ambiguous Statements',
+        description: 'President’s Planner triage view for statements without dates, owners, or projects',
+        type: 'table',
+        sectionCategory: 'Project',
+        columns: ['When', 'Project', 'People', 'Priority'],
+        filterExpression: '[Ambiguous]',
         isBuiltin: true
       })
     ];

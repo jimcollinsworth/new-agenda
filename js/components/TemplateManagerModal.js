@@ -5,6 +5,8 @@
  * 2. Instantiating Item & Note Boilerplates (Meeting Note, Delegated Follow-Up, Expense Voucher, Bug Report)
  */
 
+import { formatLocalDate } from '../utils/dateUtils.js';
+
 export class TemplateManagerModal {
   constructor({
     container,
@@ -153,7 +155,7 @@ export class TemplateManagerModal {
               </div>
               <div>
                 <label class="block text-zinc-400 mb-1">Date (When)</label>
-                <input type="date" id="tpl-var-date" class="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-700 rounded text-zinc-100" value="${new Date().toISOString().split('T')[0]}" />
+                <input type="date" id="tpl-var-date" class="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-700 rounded text-zinc-100" value="${formatLocalDate(new Date())}" />
               </div>
               <div>
                 <label class="block text-zinc-400 mb-1">Person / Contact</label>

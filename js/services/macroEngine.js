@@ -58,20 +58,19 @@ export class MacroEngine {
     const params = { _rest: [] };
     if (!argString) return params;
 
-    // Matches key:value or key:"quoted string"
-    const regex = /(\b[a-zA-Z0-9_-]+):(?:"([^"]+)"|'([^']+)'|([^\s]+))/g;
-    let lastIndex = 0;
+    // Matches word_key:value or word_key:"quoted string"
+    // Key MUST start with a letter to avoid matching times like 10:30 or 3:30pm
+    const regex = /(\b[a-zA-Z][a-zA-Z0-9_-]*):(?:"([^"]*)"|'([^']*)'|([^\s]+))/g;
     let match;
 
     while ((match = regex.exec(argString)) !== null) {
       const key = match[1].toLowerCase();
-      const val = match[2] || match[3] || match[4];
+      const val = match[2] !== undefined ? match[2] : match[3] !== undefined ? match[3] : match[4];
       params[key] = val;
-      lastIndex = regex.lastIndex;
     }
 
     // Clean rest argument without key:value pairs
-    const cleaned = argString.replace(/(\b[a-zA-Z0-9_-]+):(?:"([^"]+)"|'([^']+)'|([^\s]+))/g, '').trim();
+    const cleaned = argString.replace(/(\b[a-zA-Z][a-zA-Z0-9_-]*):(?:"([^"]*)"|'([^']*)'|([^\s]+))/g, '').trim();
     params._clean = cleaned;
 
     return params;
@@ -156,11 +155,20 @@ export class MacroEngine {
         const nlp = this.app.nlpEngine ? this.app.nlpEngine.parse(headline) : { categoryAssignments: {} };
         const categories = { ...nlp.categoryAssignments };
 
-        if (params.when) categories['When'] = params.when;
+        const dueVal = params.when || params.due;
+        if (dueVal) {
+          const parsedDate = this.app.nlpEngine ? this.app.nlpEngine.parseNaturalDate(dueVal)?.date : null;
+          categories['When'] = parsedDate ? formatLocalDate(parsedDate) : dueVal;
+        }
         if (params.project) categories['Project'] = params.project;
-        if (params.priority) categories['Priority'] = params.priority;
-        if (params.people) categories['People'] = [params.people];
-        if (params.person) categories['People'] = [params.person];
+        if (params.priority) {
+          const p = params.priority.trim();
+          categories['Priority'] = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+        }
+        if (params.people || params.person) {
+          const p = (params.people || params.person).trim();
+          categories['People'] = [p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()];
+        }
         if (params.status) categories['Status'] = params.status;
         if (params.type) categories['Type'] = params.type;
 
@@ -233,8 +241,10 @@ export class MacroEngine {
       }
 
       case 'DELEGATE': {
-        const person = params.to || params.person || (args.split(/\s+/)[0] || '').trim();
+        let person = params.to || params.person || (args.replace(/^to\s+/i, '').split(/\s+/)[0] || '').trim();
         if (!person) throw new Error('DELEGATE requires a person name (e.g. {DELEGATE Sarah due:Friday}).');
+
+        person = person.charAt(0).toUpperCase() + person.slice(1).toLowerCase();
 
         let dueDate = params.due || params.when || null;
         if (dueDate && this.app.nlpEngine) {
@@ -242,21 +252,41 @@ export class MacroEngine {
           if (parsed.when) dueDate = parsed.when;
         }
 
-        if (this.app.selectedItem) {
-          DataUtilities.delegateItem(this.app.selectedItem, person, dueDate, params.note);
-          return { message: `Delegated selected item to ${person}${dueDate ? ' due ' + dueDate : ''}` };
+        const targetItem = this.app.selectedItem || (this.app.items.length > 0 ? this.app.items[0] : null);
+        if (targetItem) {
+          DataUtilities.delegateItem(targetItem, person, dueDate, params.note);
+          return { message: `Delegated "${targetItem.text}" to ${person}${dueDate ? ' due ' + dueDate : ''}` };
         } else {
-          throw new Error('Please select an item first to delegate.');
+          throw new Error('No item available to delegate.');
         }
+      }
+
+      case 'DONE':
+      case 'TOGGLE': {
+        const targetItem = this.app.selectedItem || (this.app.items.length > 0 ? this.app.items[0] : null);
+        if (targetItem) {
+          this.app.toggleDone(targetItem.id);
+          return { message: `Toggled done status for "${targetItem.text}"` };
+        }
+        return { message: 'No item to mark done' };
+      }
+
+      case 'DELETE': {
+        if (this.app.selectedItem) {
+          const title = this.app.selectedItem.text;
+          this.app.deleteItem(this.app.selectedItem.id);
+          return { message: `Deleted item "${title}"` };
+        }
+        return { message: 'No item selected to delete' };
       }
 
       case 'TRIAGE': {
         // Find or switch to Ambiguous Statements view
-        let ambView = this.app.views.find(v => v.name.includes('Ambiguous'));
+        let ambView = this.app.views.find(v => v.name.toLowerCase().includes('ambiguous'));
         if (ambView) {
           this.app.switchView(ambView.id);
         } else {
-          this.app.activeView.filterExpression = '[-When, -Project]';
+          this.app.activeView.filterExpression = '[Ambiguous]';
         }
         const count = DataUtilities.findAmbiguousItems(this.app.items).length;
         return { message: `Switched to Ambiguous Statements triage (${count} ambiguous items found)`, count };
@@ -298,12 +328,14 @@ export class MacroEngine {
 
       case 'EXPORT': {
         const fmt = args.trim().toLowerCase();
-        if (fmt.includes('stf')) {
-          document.getElementById('btn-export-stf')?.click();
-        } else if (fmt.includes('json')) {
-          document.getElementById('btn-export-json')?.click();
-        } else {
-          document.getElementById('btn-export-markdown')?.click();
+        if (typeof document !== 'undefined') {
+          if (fmt.includes('stf')) {
+            document.getElementById('btn-export-stf')?.click();
+          } else if (fmt.includes('json')) {
+            document.getElementById('btn-export-json')?.click();
+          } else {
+            document.getElementById('btn-export-markdown')?.click();
+          }
         }
         return { message: `Triggered ${fmt} export` };
       }
@@ -492,7 +524,45 @@ export class MacroEngine {
         }
       }
 
-      // 12. Add new item
+      // 12. Mark done / complete
+      if (
+        !/\b(?:add|create|new\s+task|schedule)\b/i.test(sub) &&
+        (/^(?:done|complete)$/i.test(sub.trim()) ||
+         /\b(?:mark\s+(?:(?:this|that|it|the|selected|active|current|task|item)\s+)*(?:as\s+)?(?:done|completed?|finished)|complete\s+(?:(?:this|that|it|the|selected|active|current)\s+)*(?:task|item|it|this|that|selected)|toggle\s+(?:done|complete)|check\s+off(?:\s+(?:(?:this|that|it|the|selected|active|current)\s+)*(?:task|item|it|this|that|selected)?)?)\b/i.test(sub))
+      ) {
+        macroParts.push('{DONE}');
+        explanations.push('Toggle done status of item');
+        continue;
+      }
+
+      // 13. Delete / Remove item
+      if (
+        !/\b(?:add|create|new\s+task|schedule)\b/i.test(sub) &&
+        /\b(?:delete|remove)\s+(?:(?:this|that|it|the|selected|active|current)\s+)*(?:task|item|selected|it|this|that)\b/i.test(sub)
+      ) {
+        macroParts.push('{DELETE}');
+        explanations.push('Delete selected item');
+        continue;
+      }
+
+      // 14. Export data
+      if (/\bexport\b/i.test(sub)) {
+        if (sub.includes('stf')) {
+          macroParts.push('{EXPORT stf}');
+          explanations.push('Export Agenda STF file');
+          continue;
+        } else if (sub.includes('json')) {
+          macroParts.push('{EXPORT json}');
+          explanations.push('Export JSON backup');
+          continue;
+        } else if (sub.includes('markdown') || sub.includes('notes')) {
+          macroParts.push('{EXPORT markdown}');
+          explanations.push('Export Markdown notes');
+          continue;
+        }
+      }
+
+      // 15. Add new item
       if (/\b(?:add|create|new\s+task|schedule)\b/i.test(sub)) {
         const itemTextMatch = sub.match(/\b(?:add|create|schedule)\s+(?:task\s+)?(?:new\s+item\s+)?(.+)/i);
         if (itemTextMatch) {
@@ -520,8 +590,10 @@ export class MacroEngine {
   // --- Custom User Macros Management ---
   loadCustomMacros() {
     try {
-      const raw = localStorage.getItem(this.storageKey);
-      if (raw) return JSON.parse(raw);
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(this.storageKey);
+        if (raw) return JSON.parse(raw);
+      }
     } catch (e) {
       console.warn('Failed to load custom macros from localStorage:', e);
     }
@@ -574,7 +646,9 @@ export class MacroEngine {
   saveCustomMacros(macros) {
     this.customMacros = macros;
     try {
-      localStorage.setItem(this.storageKey, JSON.stringify(macros));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(this.storageKey, JSON.stringify(macros));
+      }
     } catch (e) {
       console.error('Failed to save macros to localStorage:', e);
     }

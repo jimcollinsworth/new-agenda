@@ -13,7 +13,9 @@ import { formatLocalDate, addDays } from '../utils/dateUtils.js';
 export class TemplateService {
   constructor() {
     this.workspaceTemplates = this.initWorkspaceTemplates();
-    this.itemTemplates = this.initItemTemplates();
+    this.builtinItemTemplates = this.initItemTemplates();
+    this.customItemTemplates = this.loadCustomItemTemplates();
+    this.itemTemplates = [...this.builtinItemTemplates, ...this.customItemTemplates];
   }
 
   // --- Workspace Starter Templates ---
@@ -199,7 +201,7 @@ export class TemplateService {
           type: 'table',
           sectionCategory: 'Project',
           columns: ['When', 'Project', 'People', 'Priority'],
-          filterExpression: '[-When, -Project]',
+          filterExpression: '[Ambiguous]',
           isBuiltin: true
         }),
         new View({
@@ -579,7 +581,42 @@ export class TemplateService {
   }
 
   getItemTemplateById(id) {
-    return this.itemTemplates.find(t => t.id === id || t.name.toLowerCase() === id.toLowerCase()) || null;
+    if (!id) return null;
+    const lower = id.toLowerCase();
+    return this.itemTemplates.find(t => t.id === id || t.name.toLowerCase() === lower || t.id.toLowerCase() === lower) || null;
+  }
+
+  loadCustomItemTemplates() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem('agendavault_custom_templates_v1');
+        if (raw) {
+          const arr = JSON.parse(raw);
+          return arr.map(t => new ItemTemplate(t));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load custom item templates:', e);
+    }
+    return [];
+  }
+
+  saveCustomItemTemplates(templates) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('agendavault_custom_templates_v1', JSON.stringify(templates.map(t => typeof t.toJSON === 'function' ? t.toJSON() : t)));
+      }
+    } catch (e) {
+      console.error('Failed to save custom templates:', e);
+    }
+  }
+
+  addCustomItemTemplate(templateData) {
+    const tpl = templateData instanceof ItemTemplate ? templateData : new ItemTemplate(templateData);
+    this.customItemTemplates.push(tpl);
+    this.itemTemplates.push(tpl);
+    this.saveCustomItemTemplates(this.customItemTemplates);
+    return tpl;
   }
 
   /**

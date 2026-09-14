@@ -336,6 +336,28 @@ export async function runAllTests() {
     assert(searchTag2.length === 1 && searchTag2[0].text.includes('Single tag item'), 'Should match single tag');
   });
 
+  test('Filter Engine', 'Evaluate [Ambiguous] filter and [-When | -Project] OR filter expression', () => {
+    const engine = new FilterEngine();
+    const items = [
+      new Item({ text: 'Complete item', categories: { When: '2026-09-20', Project: 'Website', Priority: 'High' } }),
+      new Item({ text: 'Missing date only', categories: { Project: 'Website', Priority: 'Medium' } }),
+      new Item({ text: 'Missing project only', categories: { When: '2026-09-20', Priority: 'Low' } }),
+      new Item({ text: 'Explicitly dismissed ambiguous item', categories: { Ambiguous: 'Dismissed' } }),
+      new Item({ text: 'Completed undated item', done: true })
+    ];
+
+    // [Ambiguous] virtual filter
+    const ambiguousResults = engine.filterItems(items, '[Ambiguous]');
+    assert(ambiguousResults.length === 2, `Expected 2 ambiguous items, got ${ambiguousResults.length}`);
+    assert(ambiguousResults.some(i => i.text === 'Missing date only'), 'Should include missing date');
+    assert(ambiguousResults.some(i => i.text === 'Missing project only'), 'Should include missing project');
+    assert(!ambiguousResults.some(i => i.text === 'Explicitly dismissed ambiguous item'), 'Should exclude dismissed item');
+
+    // [-When | -Project] OR expression
+    const orResults = engine.filterItems(items, '[-When | -Project]');
+    assert(orResults.length >= 2, `Expected at least 2 matching OR items, got ${orResults.length}`);
+  });
+
   // --- 5. Assignment Rules Engine Tests ---
   test('Assignment Rules', 'Auto-classify items and prioritize higher priority rules', () => {
     const rule1 = new Rule({
@@ -524,6 +546,68 @@ export async function runAllTests() {
     assert(engine.customMacros.length === initialLen, 'Should delete custom macro');
   });
 
+  test('Macro Engine', 'Preserve time strings in params and support DONE, DELETE, and natural due dates', () => {
+    const engine = new MacroEngine(null);
+
+    // Test parameter parsing preserving 10:30 time
+    const parsed = engine.parseScript('{ADD Meeting with Tom at 10:30 when:tomorrow priority:urgent}');
+    assert(parsed.length === 1, 'Should parse 1 command');
+    assert(parsed[0].params._clean === 'Meeting with Tom at 10:30', `Expected "Meeting with Tom at 10:30", got "${parsed[0].params._clean}"`);
+    assert(parsed[0].params.when === 'tomorrow', 'Should parse when parameter');
+    assert(parsed[0].params.priority === 'urgent', 'Should parse priority parameter');
+
+    // Mock app for testing DONE, DELETE, and DELEGATE with "to Sarah"
+    const testItem = new Item({ id: 'item_test_1', text: 'Task to be completed and deleted' });
+    const mockApp = {
+      items: [testItem],
+      selectedItem: testItem,
+      nlpEngine: new NLPEngine(),
+      toggleDone(id) {
+        const it = this.items.find(i => i.id === id);
+        if (it) it.done = !it.done;
+      },
+      deleteItem(id) {
+        this.items = this.items.filter(i => i.id !== id);
+        this.selectedItem = this.items[0] || null;
+      },
+      addItemWithRules(item) { this.items.unshift(item); },
+      selectItem(id) { this.selectedItem = this.items.find(i => i.id === id); },
+      saveAll() {},
+      renderCurrentView() {}
+    };
+
+    const boundEngine = new MacroEngine(mockApp);
+
+    // Test TOGGLE / DONE
+    boundEngine.dispatchCommand({ command: 'DONE', args: '', params: {} });
+    assert(testItem.done === true, 'DONE command should mark selected item done');
+
+    // Test DELEGATE with "to Sarah due:Friday"
+    const delRes = boundEngine.dispatchCommand({ command: 'DELEGATE', args: 'to Sarah due:Friday', params: engine.parseParams('to Sarah due:Friday') });
+    assert(delRes.message.includes('Sarah'), 'Should delegate to Sarah without naming person "to"');
+    assert(testItem.getCategory('DelegatedTo') === 'Sarah', 'DelegatedTo should be Sarah');
+
+    // Test DELETE
+    boundEngine.dispatchCommand({ command: 'DELETE', args: '', params: {} });
+    assert(mockApp.items.length === 0, 'DELETE command should remove item');
+
+    // Test prompt translation for mark done and delete
+    const promptDone = engine.translatePromptToMacro('mark selected task as done');
+    assert(promptDone.macroScript.includes('DONE'), 'Prompt "mark selected task as done" should translate to {DONE}');
+
+    const promptDone2 = engine.translatePromptToMacro('mark done');
+    assert(promptDone2.macroScript.includes('DONE'), 'Prompt "mark done" should translate to {DONE}');
+
+    const promptComplete = engine.translatePromptToMacro('complete selected task');
+    assert(promptComplete.macroScript.includes('DONE'), 'Prompt "complete selected task" should translate to {DONE}');
+
+    const promptDelete = engine.translatePromptToMacro('delete selected task');
+    assert(promptDelete.macroScript.includes('DELETE'), 'Prompt "delete selected task" should translate to {DELETE}');
+
+    const promptDeleteThis = engine.translatePromptToMacro('delete this task');
+    assert(promptDeleteThis.macroScript.includes('DELETE'), 'Prompt "delete this task" should translate to {DELETE}');
+  });
+
   // --- 8. Template Service Tests ---
   test('Template Service', 'Retrieve workspace templates and verify President\'s Planner structure', () => {
     const service = new TemplateService();
@@ -572,6 +656,31 @@ export async function runAllTests() {
     assert(Boolean(fallbackItem.getCategory('When')), 'Should fallback to current date');
   });
 
+  test('Template Service', 'Support custom Item Templates creation and retrieval', () => {
+    const service = new TemplateService();
+    const initialCount = service.getItemTemplates().length;
+
+    const custom = service.addCustomItemTemplate({
+      name: 'Incident Postmortem',
+      description: 'Template for outage postmortems and timeline reviews',
+      headlinePattern: 'Postmortem: {{title}}',
+      bodyPattern: '# 🚨 Incident Postmortem: {{title}}\n**Date:** {{date}}\n**Lead:** {{person}}\n\n## Impact\n- Service disruption metrics',
+      variables: ['title', 'date', 'person']
+    });
+
+    assert(custom.id, 'Custom template should have generated ID');
+    assert(service.getItemTemplates().length === initialCount + 1, 'Item templates array should increase');
+
+    const instantiated = service.instantiateItemTemplate(custom.id, {
+      title: 'Database Failover Outage',
+      person: 'Tom',
+      date: '2026-09-18'
+    });
+
+    assert(instantiated.text === 'Postmortem: Database Failover Outage', 'Headline should expand');
+    assert(instantiated.note.includes('Tom'), 'Body should contain person');
+  });
+
   // --- 9. Data Utilities Tests ---
   test('Data Utilities', 'Detect ambiguous items and rapid 1-click resolution', () => {
     const items = [
@@ -595,6 +704,21 @@ export async function runAllTests() {
     assert(target.getCategory('When') === '2026-09-25', 'Resolved When should be set');
     assert(target.getCategory('Project') === 'Death Star', 'Resolved Project should be set');
     assert(target.getCategory('Priority') === 'Urgent', 'Resolved Priority should be set');
+  });
+
+  test('Data Utilities', 'Dismissing ambiguous item removes it from ambiguous triage', () => {
+    const item = new Item({ text: 'Incomplete item missing date and project' });
+    const items = [item];
+
+    const initial = DataUtilities.findAmbiguousItems(items);
+    assert(initial.length === 1, 'Should initially flag incomplete item');
+
+    // Dismiss the item
+    item.setCategory('Ambiguous', 'Dismissed');
+    item.dismissedAmbiguous = true;
+
+    const afterDismiss = DataUtilities.findAmbiguousItems(items);
+    assert(afterDismiss.length === 0, 'Dismissed item must not be returned in ambiguous triage');
   });
 
   test('Data Utilities', 'Perpetual Tracking: roll overdue items to Today with note audit trail', () => {

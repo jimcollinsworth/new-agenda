@@ -88,10 +88,12 @@ export class AmbiguousTriageModal {
       const todayStr = formatLocalDate(new Date());
 
       ambiguousList.forEach(({ item }) => {
+        const hasPeople = item.getCategory('People') && (!Array.isArray(item.getCategory('People')) || item.getCategory('People').length > 0);
         DataUtilities.resolveAmbiguousItem(item, {
           when: item.getCategory('When') || todayStr,
           project: item.getCategory('Project') || 'Personal',
           priority: item.getCategory('Priority') || 'Medium',
+          person: hasPeople ? null : 'Sarah',
           status: item.getCategory('Status') || 'Pending'
         });
       });
@@ -127,6 +129,9 @@ export class AmbiguousTriageModal {
     const projectCat = categories.find(c => c.name === 'Project');
     const projectValues = projectCat && projectCat.values ? projectCat.values.map(v => v.name) : ['Death Star', 'Website Redesign', 'Finance & Compliance', 'Personal'];
 
+    const peopleCat = categories.find(c => c.name === 'People');
+    const peopleValues = peopleCat && peopleCat.values ? peopleCat.values.map(v => v.name) : ['Sarah', 'Tom', 'Bob', 'Alex'];
+
     this.listContainer.innerHTML = ambiguousList.map(({ item, reasons }) => `
       <div class="triage-card p-4 rounded-xl bg-zinc-800/80 border border-zinc-700 space-y-3" data-id="${item.id}">
         <div class="flex items-start justify-between">
@@ -156,6 +161,14 @@ export class AmbiguousTriageModal {
             <span class="text-zinc-500 mr-1">Project:</span>
             ${projectValues.slice(0, 3).map(p => `
               <button class="pill-resolve px-2 py-0.5 rounded bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700 transition-colors" data-id="${item.id}" data-cat="project" data-val="${p}">${p}</button>
+            `).join('')}
+          </div>
+
+          <!-- People Buttons -->
+          <div class="flex items-center space-x-1">
+            <span class="text-zinc-500 mr-1">Person:</span>
+            ${peopleValues.slice(0, 3).map(p => `
+              <button class="pill-resolve px-2 py-0.5 rounded bg-pink-900/60 hover:bg-pink-800 text-pink-200 border border-pink-700 transition-colors" data-id="${item.id}" data-cat="person" data-val="${p}">${p}</button>
             `).join('')}
           </div>
 
@@ -194,7 +207,8 @@ export class AmbiguousTriageModal {
         const items = this.getItems ? this.getItems() : [];
         const targetItem = items.find(i => i.id === id);
         if (targetItem) {
-          targetItem.setCategory('Ambiguous', null);
+          targetItem.setCategory('Ambiguous', 'Dismissed');
+          targetItem.dismissedAmbiguous = true;
           if (this.onResolveItem) this.onResolveItem(targetItem);
           this.refresh();
         }
