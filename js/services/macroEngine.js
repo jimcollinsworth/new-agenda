@@ -433,12 +433,27 @@ export class MacroEngine {
 
       // 9. Delegation
       if (/\b(?:delegate|assign\s+to)\b/i.test(sub)) {
-        const personMatch = sub.match(/\b(?:delegate\s+(?:to\s+)?|assign\s+to\s+)([A-Za-z]+)(?:\s+by\s+([A-Za-z0-9\s]+))?/i);
-        if (personMatch) {
-          const person = personMatch[1];
-          const due = personMatch[2] ? ` due:${personMatch[2].trim()}` : '';
-          macroParts.push(`{DELEGATE ${person}${due}}`);
-          explanations.push(`Delegate to ${person}`);
+        let person = null;
+        let due = '';
+
+        // Check for "to <Person>"
+        const toMatch = sub.match(/\bto\s+([A-Za-z]+)\b/i);
+        if (toMatch) {
+          person = toMatch[1];
+        } else {
+          const directMatch = sub.match(/\b(?:delegate|assign)\s+([A-Za-z]+)\b/i);
+          if (directMatch) person = directMatch[1];
+        }
+
+        const byMatch = sub.match(/\b(?:by|due(?:\s+to)?|on)\s+([A-Za-z0-9\s]+)$/i);
+        if (byMatch) {
+          due = ` due:${byMatch[1].trim()}`;
+        }
+
+        if (person) {
+          const capPerson = person.charAt(0).toUpperCase() + person.slice(1).toLowerCase();
+          macroParts.push(`{DELEGATE ${capPerson}${due}}`);
+          explanations.push(`Delegate to ${capPerson}`);
           continue;
         }
       }
