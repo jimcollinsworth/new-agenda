@@ -1,0 +1,21 @@
+{
+  "name": "new-agenda",
+  "version": "1.0.0",
+  "description": "Lotus Agenda and nvALT unified PIM web application with PowerPack templates & macros",
+  "type": "module",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "serve": "npx --yes serve . -l 8000",
+    "test": "node --input-type=module -e \"import { runAllTests } from './tests/test-suite.js'; runAllTests().then(r => { const f = r.filter(x => !x.passed); console.log('Passed: ' + r.filter(x => x.passed).length + ' / ' + r.length); if (f.length > 0) { console.error('Failed:', f); process.exit(1); } });\""
+  },
+  "keywords": [
+    "lotus-agenda",
+    "nvalt",
+    "pim",
+    "notes",
+    "productivity",
+    "markdown"
+  ],
+  "author": "Jim Collinsworth",
+  "license": "Apache-2.0"
+}

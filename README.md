@@ -8,7 +8,36 @@ Inspired by:
 
 ---
 
-## Key Highlights
+## Quick Start: How to Run
+
+Because AgendaVault is built as a pure, zero-dependency modern web application using native ES Modules, you can run it in seconds using any local HTTP server:
+
+### 1. Launch the Local Server
+
+From the cloned repository root:
+
+```bash
+# Option A: Python (standard on Windows, macOS, and Linux)
+python -m http.server 8000
+
+# Option B: Node / npm
+npm start
+
+# Option C: npx
+npx serve . -l 8000
+```
+
+### 2. Open in Your Browser
+
+Open:
+👉 **`http://localhost:8000`**
+
+### 3. Run Automated Tests
+
+- **Terminal (Unit Tests)**: Run `npm test` (executes 30 automated invariant tests via Node.js).
+- **In-Browser (Unit & E2E Suite)**: Open `http://localhost:8000/tests/test-runner.html` to run both the 30 unit tests and the 11 browser DOM end-to-end tests with real-time visual reports.
+
+---
 
 ### 1. Lotus Agenda Core Subsystems (100% Duplicated)
 - **Items & Attached Notes**: Headline items (up to 350 chars) with attached multi-line Markdown notes.
@@ -150,18 +179,12 @@ Inspired by:
 
 ---
 
-## Running the Application & Tests
+## Running the Application & Tests Summary
 
-Double-click `index.html` in any browser, or serve it with any local static HTTP server:
+| Target | Command / URL | Description |
+| :--- | :--- | :--- |
+| **Start Local App** | `npm start` or `python -m http.server 8000` | Serves web app at `http://localhost:8000` |
+| **CLI Unit Tests** | `npm test` | Runs 30 automated tests in Node.js (0 errors) |
+| **In-Browser E2E Tests** | `http://localhost:8000/tests/test-runner.html` | Runs full Unit & E2E DOM test runner |
+| **Alternative Server** | `npx serve . -l 8000` | Node-based static file server |
 
-```bash
-# Using Python:
-python -m http.server 8000
-
-# Or using npx:
-npx serve .
-```
-
-To run the automated test suite:
-Open `tests/test-runner.html` in your browser.
-Both the **Unit & Integration Suite** and the **Browser End-to-End Suite** will execute automatically and report comprehensive metrics.
