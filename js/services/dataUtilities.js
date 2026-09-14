@@ -196,25 +196,39 @@ export class DataUtilities {
     const categories = { ...parsed.categoryAssignments };
     let note = '';
 
-    // 1. Detect Phone Conversations / Calls
-    if (/\b(?:call|phone|ring|dial|voicemail|talk\s+to|spoke\s+with)\b/i.test(lower)) {
-      categories['Type'] = 'Call';
-    }
-    // 2. Detect Appointments & Meetings
-    else if (/\b(?:meet(?:ing)?|sync|lunch|dinner|appointment|standup|coffee\s+with|interview)\b/i.test(lower)) {
-      categories['Type'] = 'Meeting';
-    }
-    // 3. Detect Expenses & Purchases
-    else if (parsed.cost !== null || /\b(?:paid|bought|purchase|invoice|receipt|reimbursement|expense|\$)\b/i.test(lower)) {
+    // 1. Detect Expenses & Purchases (explicit dollar cost or purchase keywords)
+    if (parsed.cost !== null || /\b(?:paid|bought|purchase|invoice|receipt|reimbursement|expense|\$)\b/i.test(lower)) {
       categories['Type'] = 'Expense';
     }
-    // 4. Detect Delegated Promises / Follow-ups
+    // 2. Detect Delegated Promises / Follow-ups
     else if (/\b(?:delegat(?:e|ed)|promised|waiting\s+for|ask\s+.*to|follow\s*up)\b/i.test(lower)) {
       categories['Type'] = 'Follow-up';
       categories['Status'] = 'Delegated';
-      if (parsed.people && parsed.people.length > 0) {
-        categories['DelegatedTo'] = parsed.people[0];
+
+      let assignedPerson = parsed.people && parsed.people.length > 0 ? parsed.people[0] : null;
+      if (!assignedPerson) {
+        const promiseMatch = rawText.match(/\b([A-Za-z]+)\s+promised\b/i) ||
+                             rawText.match(/\bpromised\s+by\s+([A-Za-z]+)\b/i) ||
+                             rawText.match(/\bdelegat(?:e|ed)\s+to\s+([A-Za-z]+)\b/i) ||
+                             rawText.match(/\bwaiting\s+for\s+([A-Za-z]+)\b/i);
+        if (promiseMatch) {
+          assignedPerson = promiseMatch[1].charAt(0).toUpperCase() + promiseMatch[1].slice(1).toLowerCase();
+        }
       }
+
+      if (assignedPerson) {
+        categories['DelegatedTo'] = assignedPerson;
+        if (!categories['People']) categories['People'] = [assignedPerson];
+        else if (!categories['People'].includes(assignedPerson)) categories['People'].push(assignedPerson);
+      }
+    }
+    // 3. Detect Phone Conversations / Calls
+    else if (/\b(?:call|phone|ring|dial|voicemail|talk\s+to|spoke\s+with)\b/i.test(lower)) {
+      categories['Type'] = 'Call';
+    }
+    // 4. Detect Appointments & Meetings
+    else if (/\b(?:meet(?:ing)?|sync|lunch|dinner|appointment|standup|coffee\s+with|interview)\b/i.test(lower)) {
+      categories['Type'] = 'Meeting';
     } else {
       categories['Type'] = 'Task';
     }
