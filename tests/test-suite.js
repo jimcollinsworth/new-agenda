@@ -8,9 +8,13 @@ import { Item } from '../js/models/Item.js';
 import { Category, CategoryValue } from '../js/models/Category.js';
 import { Rule } from '../js/models/Rule.js';
 import { View } from '../js/models/View.js';
+import { WorkspaceTemplate, ItemTemplate } from '../js/models/Template.js';
 import { NLPEngine } from '../js/services/nlpEngine.js';
 import { FilterEngine } from '../js/services/filterEngine.js';
 import { STFService } from '../js/services/stfService.js';
+import { TemplateService } from '../js/services/templateService.js';
+import { MacroEngine } from '../js/services/macroEngine.js';
+import { DataUtilities } from '../js/services/dataUtilities.js';
 import { formatLocalDate, addDays, parseLocalDate } from '../js/utils/dateUtils.js';
 
 export async function runAllTests() {
@@ -410,6 +414,268 @@ export async function runAllTests() {
     assert(importedItem.cost === 250000, 'Cost should match');
     assert(importedItem.getCategory('Project') === 'Death Star', 'Project category should match');
     assert(Array.isArray(importedItem.getCategory('People')) && importedItem.getCategory('People').includes('Tarkin'), 'People category should remain an array');
+  });
+
+  // --- 7. Macro Engine Tests ---
+  test('Macro Engine', 'Parse curly brace macro syntax and parameters', () => {
+    const engine = new MacroEngine(null);
+    const parsed = engine.parseScript('{VIEW Datebook Schedule}; {FILTER [-Done]}; {ASSIGN Priority Urgent}; {ADD Deploy app when:2026-09-20 project:"Death Star"}');
+
+    assert(parsed.length === 4, `Expected 4 parsed commands, got ${parsed.length}`);
+    assert(parsed[0].command === 'VIEW' && parsed[0].args === 'Datebook Schedule', 'Command 0 should be VIEW');
+    assert(parsed[1].command === 'FILTER' && parsed[1].args === '[-Done]', 'Command 1 should be FILTER');
+    assert(parsed[2].command === 'ASSIGN' && parsed[2].args === 'Priority Urgent', 'Command 2 should be ASSIGN');
+    assert(parsed[3].command === 'ADD', 'Command 3 should be ADD');
+    assert(parsed[3].params.when === '2026-09-20', 'ADD when param should match');
+    assert(parsed[3].params.project === 'Death Star', 'ADD project param should match');
+  });
+
+  test('Macro Engine', 'Execute macro commands on mock application', () => {
+    const mockApp = {
+      views: [
+        new View({ id: 'v1', name: 'Main Dashboard' }),
+        new View({ id: 'v2', name: 'Project Planner' })
+      ],
+      activeView: null,
+      items: [
+        new Item({ text: 'Task 1', categories: { Project: 'Website' } })
+      ],
+      rules: [
+        new Rule({
+          name: 'Urgent Flag',
+          conditionType: 'text_contains',
+          conditionValue: 'urgent',
+          targetCategory: 'Priority',
+          targetValue: 'Urgent'
+        })
+      ],
+      selectedItem: null,
+      switchView(id) { this.activeView = this.views.find(v => v.id === id); },
+      addItemWithRules(item) { this.items.unshift(item); },
+      selectItem(id) { this.selectedItem = this.items.find(i => i.id === id); },
+      getFilteredItems() { return this.items; },
+      saveAll() {},
+      renderCurrentView() {}
+    };
+    mockApp.activeView = mockApp.views[0];
+    mockApp.selectedItem = mockApp.items[0];
+
+    const engine = new MacroEngine(mockApp);
+
+    // Test VIEW
+    engine.dispatchCommand({ command: 'VIEW', args: 'Project Planner', params: {} });
+    assert(mockApp.activeView.name === 'Project Planner', 'Should switch view');
+
+    // Test FILTER
+    engine.dispatchCommand({ command: 'FILTER', args: '[+Priority:Urgent]', params: {} });
+    assert(mockApp.activeView.filterExpression === '[+Priority:Urgent]', 'Should set filter expression');
+
+    // Test ASSIGN
+    engine.dispatchCommand({ command: 'ASSIGN', args: 'Priority Urgent', params: {} });
+    assert(mockApp.selectedItem.getCategory('Priority') === 'Urgent', 'Should assign category to selected item');
+
+    // Test ADD
+    const addRes = engine.dispatchCommand({ command: 'ADD', args: 'Test urgent macro task', params: { _clean: 'Test urgent macro task', project: 'Website' } });
+    assert(addRes.itemId, 'ADD should create item');
+    assert(mockApp.items[0].text === 'Test urgent macro task', 'New item text should match');
+
+    // Test RULES
+    mockApp.items[0].text = 'Task containing urgent keyword';
+    engine.dispatchCommand({ command: 'RULES', args: '', params: {} });
+    assert(mockApp.items[0].getCategory('Priority') === 'Urgent', 'Rules should assign Priority: Urgent');
+  });
+
+  test('Macro Engine', 'Translate natural language prompt to Agenda macro commands', () => {
+    const engine = new MacroEngine(null);
+
+    const t1 = engine.translatePromptToMacro('roll overdue tasks to today and reapply rules');
+    assert(t1.macroScript.includes('ROLLOVER') && t1.macroScript.includes('RULES'), `Expected ROLLOVER and RULES, got ${t1.macroScript}`);
+
+    const t2 = engine.translatePromptToMacro('switch to datebook and show urgent items');
+    assert(t2.macroScript.includes('VIEW Datebook') && t2.macroScript.includes('FILTER [+Priority:Urgent]'), `Expected VIEW Datebook and FILTER Urgent, got ${t2.macroScript}`);
+
+    const t3 = engine.translatePromptToMacro('archive completed items');
+    assert(t3.macroScript.includes('ARCHIVE'), `Expected ARCHIVE, got ${t3.macroScript}`);
+
+    const t4 = engine.translatePromptToMacro('triage ambiguous items');
+    assert(t4.macroScript.includes('TRIAGE'), `Expected TRIAGE, got ${t4.macroScript}`);
+
+    const t5 = engine.translatePromptToMacro('delegate review to Sarah by Friday');
+    assert(t5.macroScript.includes('DELEGATE Sarah'), `Expected DELEGATE Sarah, got ${t5.macroScript}`);
+  });
+
+  test('Macro Engine', 'Manage custom user macros with keyboard shortcuts', () => {
+    const engine = new MacroEngine(null, { storageKey: 'test_custom_macros' });
+    const initialLen = engine.customMacros.length;
+
+    const added = engine.addCustomMacro({
+      name: 'Custom Test Macro',
+      description: 'Test description',
+      script: '{VIEW Datebook}; {FILTER [-Done]}',
+      shortcut: 'Alt+9'
+    });
+    assert(added.id, 'Should create new macro with ID');
+    assert(engine.customMacros.length === initialLen + 1, 'Custom macros array should grow');
+
+    const byShortcut = engine.getMacroByShortcut('Alt+9');
+    assert(byShortcut && byShortcut.name === 'Custom Test Macro', 'Should lookup macro by shortcut');
+
+    engine.deleteCustomMacro(added.id);
+    assert(engine.customMacros.length === initialLen, 'Should delete custom macro');
+  });
+
+  // --- 8. Template Service Tests ---
+  test('Template Service', 'Retrieve workspace templates and verify President\'s Planner structure', () => {
+    const service = new TemplateService();
+    const workspaces = service.getWorkspaceTemplates();
+    assert(workspaces.length >= 3, `Expected at least 3 workspace templates, got ${workspaces.length}`);
+
+    const pp = service.getWorkspaceTemplateById('presidents_planner');
+    assert(pp !== null, "President's Planner template must exist");
+    assert(pp.views.some(v => v.name.includes('Dashboard')), 'PP should include Dashboard');
+    assert(pp.views.some(v => v.name.includes('Ambiguous')), 'PP should include ? Ambiguous Statements view');
+    assert(pp.views.some(v => v.name.includes('Delegated')), 'PP should include Delegated view');
+    assert(pp.categories.some(c => c.name === 'DelegatedTo'), 'PP should include DelegatedTo category');
+  });
+
+  test('Template Service', 'Expand Item Templates with variables and default fallbacks', () => {
+    const service = new TemplateService();
+
+    // Meeting Note Template
+    const meeting = service.instantiateItemTemplate('meeting_note', {
+      title: 'Quarterly Architecture Sync',
+      person: 'Tom',
+      date: '2026-09-22',
+      project: 'Death Star'
+    });
+    assert(meeting.text === 'Meeting: Quarterly Architecture Sync with Tom', 'Headline should substitute title and person');
+    assert(meeting.note.includes('Agenda'), 'Body should include Agenda heading');
+    assert(meeting.note.includes('Tom'), 'Body should include person');
+    assert(meeting.getCategory('When') === '2026-09-22', 'When date should match');
+    assert(meeting.getCategory('Project') === 'Death Star', 'Project should match');
+    assert(meeting.getCategory('Type') === 'Meeting', 'Type should be Meeting');
+
+    // Delegated Promise Template
+    const promise = service.instantiateItemTemplate('delegated_promise', {
+      title: 'Deliver Security Audit',
+      person: 'Sarah',
+      date: '2026-09-30',
+      project: 'Finance & Compliance'
+    });
+    assert(promise.text === 'Follow-up: Sarah promised Deliver Security Audit', 'Headline should format promise');
+    assert(promise.getCategory('Type') === 'Follow-up', 'Type should be Follow-up');
+    assert(promise.getCategory('Status') === 'Delegated', 'Status should be Delegated');
+
+    // Fallback variables
+    const fallbackItem = service.instantiateItemTemplate('meeting_note', {});
+    assert(fallbackItem.text.includes('Untitled Note'), 'Should fallback to default title');
+    assert(Boolean(fallbackItem.getCategory('When')), 'Should fallback to current date');
+  });
+
+  // --- 9. Data Utilities Tests ---
+  test('Data Utilities', 'Detect ambiguous items and rapid 1-click resolution', () => {
+    const items = [
+      new Item({ text: 'Complete item', categories: { When: '2026-09-20', Project: 'Website', Priority: 'High', Status: 'Pending' } }),
+      new Item({ text: 'Undated item', categories: { Project: 'Website', Priority: 'Medium' } }),
+      new Item({ text: 'No project item', categories: { When: '2026-09-20', Priority: 'Low' } }),
+      new Item({ text: 'Unassigned Meeting', categories: { When: '2026-09-20', Project: 'Website', Type: 'Meeting' } }),
+      new Item({ text: 'Finished item without date', done: true }) // Completed should not be flagged
+    ];
+
+    const ambiguous = DataUtilities.findAmbiguousItems(items);
+    assert(ambiguous.length === 3, `Expected 3 ambiguous items, got ${ambiguous.length}`);
+
+    // Resolve ambiguous item
+    const target = ambiguous[0].item;
+    DataUtilities.resolveAmbiguousItem(target, {
+      when: '2026-09-25',
+      project: 'Death Star',
+      priority: 'Urgent'
+    });
+    assert(target.getCategory('When') === '2026-09-25', 'Resolved When should be set');
+    assert(target.getCategory('Project') === 'Death Star', 'Resolved Project should be set');
+    assert(target.getCategory('Priority') === 'Urgent', 'Resolved Priority should be set');
+  });
+
+  test('Data Utilities', 'Perpetual Tracking: roll overdue items to Today with note audit trail', () => {
+    const today = new Date(2026, 8, 15); // Sept 15, 2026
+    const items = [
+      new Item({ text: 'Overdue task 1', categories: { When: '2026-09-10' }, note: 'Old note' }),
+      new Item({ text: 'Overdue task 2', categories: { When: '2026-09-12' } }),
+      new Item({ text: 'Today task', categories: { When: '2026-09-15' } }),
+      new Item({ text: 'Future task', categories: { When: '2026-09-20' } }),
+      new Item({ text: 'Completed overdue task', categories: { When: '2026-09-08' }, done: true })
+    ];
+
+    const result = DataUtilities.rolloverOverdueItems(items, '2026-09-15', today);
+    assert(result.count === 2, `Expected 2 rolled items, got ${result.count}`);
+
+    const item1 = items[0];
+    assert(item1.getCategory('When') === '2026-09-15', 'Item 1 should be rolled to 2026-09-15');
+    assert(item1.note.includes('[Rollover]'), 'Item 1 note should contain audit record');
+    assert(item1.note.includes('2026-09-10'), 'Item 1 note should contain previous date');
+  });
+
+  test('Data Utilities', 'Delegated items tracking and delegation helper', () => {
+    const item = new Item({ text: 'Deliver compliance memo' });
+    DataUtilities.delegateItem(item, 'Sarah', '2026-09-28', 'Review draft on Wednesday');
+
+    assert(item.getCategory('DelegatedTo') === 'Sarah', 'DelegatedTo should be Sarah');
+    assert(item.getCategory('Status') === 'Delegated', 'Status should be Delegated');
+    assert(item.getCategory('When') === '2026-09-28', 'When should match due date');
+    assert(item.note.includes('Delegation Record'), 'Note should include delegation record');
+
+    const delegatedList = DataUtilities.getDelegatedItems([item, new Item({ text: 'Non-delegated' })]);
+    assert(delegatedList.length === 1 && delegatedList[0].text === 'Deliver compliance memo', 'Should find delegated item');
+  });
+
+  test('Data Utilities', 'Scratch Pad DWIM multi-dimensional classifier', () => {
+    const nlp = new NLPEngine();
+    const ref = new Date(2026, 8, 15, 12, 0, 0);
+
+    // Call
+    const callItem = DataUtilities.classifyScratchPadText('Call Sarah this Friday about contract', nlp, ref);
+    assert(callItem.getCategory('Type') === 'Call', 'Should classify as Call');
+    assert(callItem.getCategory('When') === '2026-09-18', 'Should parse date');
+    assert(callItem.getCategory('People').includes('Sarah'), 'Should parse person Sarah');
+
+    // Appointment / Meeting
+    const meetItem = DataUtilities.classifyScratchPadText('Meet with Tom tomorrow at 3pm', nlp, ref);
+    assert(meetItem.getCategory('Type') === 'Meeting', 'Should classify as Meeting');
+
+    // Expense
+    const expenseItem = DataUtilities.classifyScratchPadText('Lunch receipt with client $45.50', nlp, ref);
+    assert(expenseItem.getCategory('Type') === 'Expense', 'Should classify as Expense');
+    assert(expenseItem.cost === 45.5, `Expected cost 45.5, got ${expenseItem.cost}`);
+
+    // Delegated follow-up
+    const promiseItem = DataUtilities.classifyScratchPadText('Sarah promised delivery of report next week', nlp, ref);
+    assert(promiseItem.getCategory('Type') === 'Follow-up', 'Should classify as Follow-up');
+    assert(promiseItem.getCategory('Status') === 'Delegated', 'Should set Status: Delegated');
+    assert(promiseItem.getCategory('DelegatedTo') === 'Sarah', 'Should set DelegatedTo: Sarah');
+  });
+
+  test('Data Utilities', 'Bulk assign, archive completed, and purge operations', () => {
+    const items = [
+      new Item({ text: 'Task 1', done: true }),
+      new Item({ text: 'Task 2', done: false }),
+      new Item({ text: 'Task 3', done: true })
+    ];
+
+    // Bulk assign
+    const assignedCount = DataUtilities.bulkAssignCategory(items, 'Priority', 'High');
+    assert(assignedCount === 3, 'Should assign 3 items');
+    assert(items.every(i => i.getCategory('Priority') === 'High'), 'All items should have Priority: High');
+
+    // Archive completed
+    const archivedCount = DataUtilities.archiveCompletedItems(items);
+    assert(archivedCount === 2, `Expected 2 archived items, got ${archivedCount}`);
+    assert(items[0].getCategory('Status') === 'Archived', 'Item 0 should be Archived');
+    assert(items[1].getCategory('Status') !== 'Archived', 'Item 1 should NOT be Archived');
+
+    // Purge completed
+    const remaining = DataUtilities.purgeCompletedItems(items);
+    assert(remaining.length === 1 && remaining[0].text === 'Task 2', 'Only uncompleted items should remain');
   });
 
   return results;

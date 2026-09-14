@@ -67,28 +67,68 @@ Inspired by:
   - `Alt-F3`: Macro Manager & Automation
   - `Ctrl+S`: Save Note
 
+### 3. President's Planner (ppdoc.pdf) PowerPack Enhancements
+- **Workspace & Database Templates (`.AG`)**:
+  - **President's Planner (`PLANNER.AG`)**: Full PIM architecture with Scratch Pad, Follow-ups, Delegated Promises, Activities log, and Ambiguous Statements triage.
+  - **GTD Executive Planner (`GTD.AG`)**: Context-based next actions (`@Calls`, `@Computer`, `@Errands`, `@WaitingFor`).
+  - **Software Engineering Tracker (`PROJECTS.AG`)**: Sprint board, defect severity triage, component tagging.
+- **Item & Note Boilerplate Expansion Templates**:
+  - `meeting_note`: Pre-formatted meeting record with attendees, agenda, discussion notes, and action item checklist.
+  - `delegated_promise`: Commitment tracker recording responsible party, check-in milestones, and deliverable specs.
+  - `expense_voucher`: Financial purchase entry with vendor details, cost allocation, and receipt checklist.
+  - `bug_report`: Structured defect ticket with reproduction steps, expected vs actual behavior, and environment.
+  - `daily_journal`: Top 3 Priorities, discoveries, and evening reflection retro.
+  - Quick access via `F9`, the **Templates** button, or Omnibar (`/template meeting` or `/t`).
+- **Agenda Macro Command Language `{COMMAND args}`**:
+  - Scriptable curly-brace command syntax for automated workflows:
+    - `{VIEW <name_or_id>}`: Switch view
+    - `{FILTER <expression>}`: Apply filter expression
+    - `{SEARCH <query>}`: Instant incremental search
+    - `{ASSIGN <cat> <val>}`: Assign category to selected or visible items
+    - `{ADD <text> [when:...] [project:...] [priority:...] [people:...] [cost:...]}`: Add structured item
+    - `{ROLLOVER [days]}`: Reschedule overdue tasks to Today with audit trail
+    - `{ARCHIVE}`: Archive completed items
+    - `{PURGE}`: Permanently delete completed items
+    - `{RULES}`: Re-evaluate all Agenda assignment rules
+    - `{DELEGATE <person> [due:<date>]}`: Assign task delegation
+    - `{TRIAGE}`: Switch to `? Ambiguous Statements` view
+    - `{TEMPLATE <name>}`: Instantiate item template
+    - `{THEME <dos|dark|light>}` / `{LAYOUT <layout>}`: Appearance controls
+- **Prompt-Based AI Macro Automation**:
+  - Natural language instruction interpreter: translates freeform instructions (e.g. *"Roll overdue tasks to today and reapply rules"*, *"Delegate Death Star review to Sarah by Friday"*) into native Agenda macro sequences.
+  - Interactive Macro Manager console (`Alt-F3`) with execution logs and custom macro shortcut keys (`Alt+1` through `Alt+5`).
+- **President's Planner Key Data Utilities**:
+  - **Top-Screen Scratch Pad with DWIM (Do-What-I-Mean)**: Fast entry bar that automatically distinguishes phone calls, appointments, follow-ups, and expenses.
+  - **"? Ambiguous Statements" Triage Center (`F7`)**: Automatic detection of items missing dates, projects, or owners with 1-click fast-resolution pills.
+  - **Perpetual Tracking & Date Rollover**: Bump past-due items to Today while recording an immutable audit trail in the attached note.
+  - **Delegation & Commitment Tracker**: Dedicated view and filters for promises made by or delegated to others.
+
 ---
 
 ## File Structure
 
 ```text
-├── index.html                       # Main application interface
+├── index.html                       # Main application interface with Omnibar, Viewport, Editor
 ├── README.md                        # Documentation & architecture guide
 ├── css/
 │   ├── styles.css                   # Modern styling & typography (DM Sans / JetBrains Mono)
 │   └── retro-dos.css                # Authentic 1989 Lotus Agenda MS-DOS VGA CRT theme
 ├── js/
-│   ├── app.js                       # Main application controller and event bus
+│   ├── app.js                       # Main application controller, event bus, and shortcut router
 │   ├── models/
 │   │   ├── Item.js                  # Item model with notes & category mappings
 │   │   ├── Category.js              # Category & CategoryValue models with keywords
 │   │   ├── Rule.js                  # Condition-action assignment rules
-│   │   └── View.js                  # View definitions (sections, columns, filters)
+│   │   ├── View.js                  # View definitions (sections, columns, filters)
+│   │   └── Template.js              # WorkspaceTemplate and ItemTemplate models
 │   ├── services/
 │   │   ├── nlpEngine.js             # Natural language dates and entity parser
 │   │   ├── filterEngine.js          # Agenda boolean filter evaluator & nvALT search
 │   │   ├── stfService.js            # Lotus Agenda .stf parser and serializer
-│   │   └── storageService.js        # LocalStorage persistence & sample data
+│   │   ├── storageService.js        # LocalStorage persistence & sample data
+│   │   ├── templateService.js       # Workspace & Item note boilerplate engine
+│   │   ├── macroEngine.js           # Agenda macro parser, prompt translator, and hotkeys
+│   │   └── dataUtilities.js         # Ambiguous triage, perpetual rollover, and delegation
 │   └── components/
 │       ├── Omnibar.js               # nvALT search & create bar with live NLP chips
 │       ├── AgendaSectionsView.js    # Grouped section dashboard (classic Agenda)
@@ -98,16 +138,19 @@ Inspired by:
 │       ├── AgendaMatrixView.js      # 2D cross-tabulation matrix view
 │       ├── NoteEditor.js            # MultiMarkdown editor, live preview, [[WikiLinks]]
 │       ├── CategoryManagerModal.js  # Category, values, keywords, and rules builder
-│       ├── MacroManagerModal.js     # Macro automation runner and shortcut reference
-│       └── GenerativeUIModal.js     # Natural language task and view generator
+│       ├── MacroManagerModal.js     # Macro runner, CLI interpreter, prompt synthesizer, hotkeys
+│       ├── TemplateManagerModal.js  # Workspace template loader & note boilerplate expander
+│       ├── AmbiguousTriageModal.js  # ? Ambiguous Statements 1-click triage center
+│       └── GenerativeUIModal.js     # Natural language task and view synthesizer
 └── tests/
-    ├── test-runner.html             # In-browser test runner page
-    └── test-suite.js                # Automated unit and integration tests
+    ├── test-runner.html             # In-browser test runner page with interactive filters
+    ├── test-suite.js                # Unit and integration tests (NLP, Filters, Rules, STF, Macros, Templates)
+    └── e2e-suite.js                 # Browser End-to-End automated test suite
 ```
 
 ---
 
-## Running the Application
+## Running the Application & Tests
 
 Double-click `index.html` in any browser, or serve it with any local static HTTP server:
 
@@ -120,4 +163,5 @@ npx serve .
 ```
 
 To run the automated test suite:
-Open `tests/test-runner.html` in your browser. All unit tests will run automatically and report results.
+Open `tests/test-runner.html` in your browser.
+Both the **Unit & Integration Suite** and the **Browser End-to-End Suite** will execute automatically and report comprehensive metrics.

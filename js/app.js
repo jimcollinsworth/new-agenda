@@ -1,6 +1,7 @@
 /**
  * app.js - Main Application Controller for AgendaVault.
- * Unifies all of Lotus Agenda's PIM architecture with nvALT's Notational Velocity workflow.
+ * Unifies all of Lotus Agenda's PIM architecture with nvALT's Notational Velocity workflow,
+ * enhanced with President's Planner (ppdoc.pdf) Templates, Macros, and Data Utilities.
  */
 
 import { Item } from './models/Item.js';
@@ -12,6 +13,9 @@ import { NLPEngine } from './services/nlpEngine.js';
 import { FilterEngine } from './services/filterEngine.js';
 import { STFService } from './services/stfService.js';
 import { StorageService } from './services/storageService.js';
+import { TemplateService } from './services/templateService.js';
+import { MacroEngine } from './services/macroEngine.js';
+import { DataUtilities } from './services/dataUtilities.js';
 import { formatLocalDate, addDays } from './utils/dateUtils.js';
 
 import { Omnibar } from './components/Omnibar.js';
@@ -24,11 +28,15 @@ import { NoteEditor } from './components/NoteEditor.js';
 import { CategoryManagerModal } from './components/CategoryManagerModal.js';
 import { MacroManagerModal } from './components/MacroManagerModal.js';
 import { GenerativeUIModal } from './components/GenerativeUIModal.js';
+import { TemplateManagerModal } from './components/TemplateManagerModal.js';
+import { AmbiguousTriageModal } from './components/AmbiguousTriageModal.js';
 
 export class App {
   constructor() {
     this.storage = new StorageService();
     this.filterEngine = new FilterEngine();
+    this.templateService = new TemplateService();
+    this.macroEngine = new MacroEngine(this);
 
     // State
     this.items = [];
@@ -69,8 +77,9 @@ export class App {
     this.initHeaderToolbar();
     this.initGlobalShortcuts();
 
-    // 6. Initial Render
+    // 6. Initial Render & Triage Update
     this.renderCurrentView();
+    this.updateTriageBadge();
 
     // Select first item if present
     if (this.items.length > 0) {
@@ -85,7 +94,35 @@ export class App {
       rules: this.rules,
       views: this.views
     });
-    this.noteEditor.setAllItems(this.items);
+    if (this.noteEditor) {
+      this.noteEditor.setAllItems(this.items);
+    }
+    this.updateTriageBadge();
+  }
+
+  updateTriageBadge() {
+    const badge = document.getElementById('header-triage-badge');
+    if (!badge) return;
+    const count = DataUtilities.findAmbiguousItems(this.items).length;
+    badge.textContent = count;
+    if (count > 0) {
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
+  triggerScratchPadPrompt(defaultText = '') {
+    const text = prompt("President's Planner Scratch Pad (DWIM):\nEnter freeform note, phone call, appointment, promise, or expense:", defaultText);
+    if (text && text.trim()) {
+      const item = DataUtilities.classifyScratchPadText(text.trim(), this.nlpEngine);
+      if (item) {
+        this.addItemWithRules(item);
+        this.selectItem(item.id);
+        const type = item.getCategory('Type') || 'Task';
+        alert(`⚡ Scratch Pad parsed "${item.text}" as [${type}] with date ${item.getCategory('When') || 'None'}`);
+      }
+    }
   }
 
   // --- Theme & Layout Management ---
@@ -150,6 +187,20 @@ export class App {
       container,
       nlpEngine: this.nlpEngine,
       onSearch: (query) => {
+        // Omnibar template command shortcut
+        if (query.trim().toLowerCase().startsWith('/template') || query.trim().toLowerCase().startsWith('/t ')) {
+          const tplName = query.trim().replace(/^\/(?:template|t)\s*/i, '').trim();
+          if (tplName) {
+            const found = this.templateService.getItemTemplateById(tplName);
+            if (found) {
+              this.templateModal.selectedItemTemplate = found;
+            }
+          }
+          this.templateModal.show('items');
+          this.omnibar.clear();
+          return;
+        }
+
         this.searchQuery = query;
         this.renderCurrentView();
       },
@@ -310,7 +361,40 @@ export class App {
 
     this.macroModal = new MacroManagerModal({
       container: document.getElementById('modal-macro-mount'),
+      macroEngine: this.macroEngine,
       onRunMacro: (macroName) => this.runMacro(macroName)
+    });
+
+    this.templateModal = new TemplateManagerModal({
+      container: document.getElementById('modal-template-mount'),
+      templateService: this.templateService,
+      onApplyWorkspaceTemplate: (id, mode) => {
+        const result = this.templateService.applyWorkspaceTemplate(id, this, mode);
+        this.updateTriageBadge();
+        alert(`Loaded template "${result.templateName}" with ${result.itemCount} items.`);
+      },
+      onInsertItemTemplate: (tplId, vars) => {
+        const item = this.templateService.instantiateItemTemplate(tplId, vars);
+        this.addItemWithRules(item);
+        this.selectItem(item.id);
+      }
+    });
+
+    this.triageModal = new AmbiguousTriageModal({
+      container: document.getElementById('modal-triage-mount'),
+      getItems: () => this.items,
+      getCategories: () => this.categories,
+      onResolveItem: (item) => {
+        this.applyRulesToItem(item);
+        this.saveAll();
+        this.renderCurrentView();
+        this.updateTriageBadge();
+      },
+      onTriageCompleted: () => {
+        this.saveAll();
+        this.renderCurrentView();
+        this.updateTriageBadge();
+      }
     });
 
     this.genModal = new GenerativeUIModal({
@@ -335,10 +419,16 @@ export class App {
   // --- Header Toolbar ---
   initHeaderToolbar() {
     this.renderViewSwitcher();
+    this.updateTriageBadge();
 
     // New Item button
     document.getElementById('btn-new-item').addEventListener('click', () => {
       this.omnibar.focus();
+    });
+
+    // Scratch Pad DWIM button
+    document.getElementById('btn-scratch-pad')?.addEventListener('click', () => {
+      this.triggerScratchPadPrompt();
     });
 
     // Theme select
@@ -353,6 +443,16 @@ export class App {
     layoutSelect.value = this.settings.layout;
     layoutSelect.addEventListener('change', (e) => {
       this.applyLayout(e.target.value);
+    });
+
+    // Templates button
+    document.getElementById('btn-open-templates')?.addEventListener('click', () => {
+      this.templateModal.show();
+    });
+
+    // Triage button
+    document.getElementById('btn-open-triage')?.addEventListener('click', () => {
+      this.triageModal.show();
     });
 
     // Categories button
@@ -581,8 +681,8 @@ export class App {
   }
 
   // --- Macro Execution ---
-  runMacro(macroName) {
-    switch (macroName) {
+  runMacro(macroNameOrScript) {
+    switch (macroNameOrScript) {
       case 'archiveDone':
         this.items.forEach(i => {
           if (i.done) i.setCategory('Status', 'Archived');
@@ -602,22 +702,22 @@ export class App {
         break;
 
       case 'bumpOverdue':
-        const todayStr = formatLocalDate(new Date());
-        let bumped = 0;
-        this.items.forEach(i => {
-          const when = i.getCategory('When');
-          if (when && String(when).split('T')[0] < todayStr && !i.done) {
-            i.setCategory('When', todayStr);
-            bumped++;
-          }
-        });
-        alert(`Rescheduled ${bumped} overdue tasks to Today.`);
+        const res = DataUtilities.rolloverOverdueItems(this.items);
+        alert(`Rescheduled ${res.count} overdue tasks to Today.`);
         break;
 
       case 'purgeCompleted':
         if (confirm('Permanently delete all completed items? This cannot be undone.')) {
-          this.items = this.items.filter(i => !i.done);
+          this.items = DataUtilities.purgeCompletedItems(this.items);
           alert('Purged completed items.');
+        }
+        break;
+
+      default:
+        // Execute via MacroEngine
+        const result = this.macroEngine.execute(macroNameOrScript);
+        if (result.log && result.log.length > 0) {
+          alert(result.log.join('\n'));
         }
         break;
     }
@@ -634,10 +734,20 @@ export class App {
         e.preventDefault();
         this.categoryModal.show();
       }
+      // F7: Ambiguous Statements Triage
+      else if (e.key === 'F7') {
+        e.preventDefault();
+        this.triageModal.show();
+      }
       // F8: Switch views
       else if (e.key === 'F8') {
         e.preventDefault();
         this.cycleView(1);
+      }
+      // F9: Templates Manager
+      else if (e.key === 'F9') {
+        e.preventDefault();
+        this.templateModal.show();
       }
       // Alt-N: Next View
       else if (e.altKey && e.key.toLowerCase() === 'n') {
@@ -653,6 +763,15 @@ export class App {
       else if (e.altKey && e.key === 'F3') {
         e.preventDefault();
         this.macroModal.show();
+      }
+      // Alt+1 .. Alt+5: Macro Hotkeys
+      else if (e.altKey && e.key >= '1' && e.key <= '5') {
+        const shortcut = `Alt+${e.key}`;
+        const found = this.macroEngine.getMacroByShortcut(shortcut);
+        if (found) {
+          e.preventDefault();
+          this.macroEngine.execute(found.script);
+        }
       }
     });
   }
